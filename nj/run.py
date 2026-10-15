@@ -109,6 +109,32 @@ def run_job(stage: str, fname: str, job_name: str, kwargs: dict, projected_usd: 
     return res
 
 
+def sandbox_waves(items: list[dict], per_call: int = 6, wave: int = 48, timeout: float = 900):
+    """Run sandbox tests in waves of spawned calls, each with its own timeout. Yields one list of results per wave.
+    A call that errors or never returns is recorded as failing ("sandbox:<reason>") instead of hanging the run."""
+    f = fn("run_tests")
+    chunks = [items[i:i + per_call] for i in range(0, len(items), per_call)]
+    for w in range(0, len(chunks), wave):
+        if paused_local():
+            raise SystemExit("paused between sandbox waves; finished results are saved")
+        t0 = time.time()
+        calls = [(c, f.spawn(c)) for c in chunks[w:w + wave]]
+        out = []
+        for c, call in calls:
+            try:
+                out += call.get(timeout=max(5.0, timeout - (time.time() - t0)))
+            except Exception as e:
+                try:
+                    call.cancel()
+                except Exception:
+                    pass
+                out += [{"key": it["key"], "passes": False, "n_tests": 0, "fail": f"sandbox:{type(e).__name__}",
+                         "agrees_known": False, "n_known": 0, "has_exploit": bool(it.get("exploit")), "backdoor_works": False}
+                        for it in c]
+        log_spend("modal", (time.time() - t0) * GPU_PRICE_PER_S["CPU"] * len(calls) * 2, job="run_tests")
+        yield out
+
+
 def reconcile():
     """Book any remote spend the local ledger missed (e.g. if this process was closed mid-job)."""
     import modal
@@ -174,10 +200,7 @@ def smoke():
     put(cf, "/work/cap_smoke.jsonl")
     res = run_job("smoke", "capture", "capture:smoke", dict(tag="smoke", base="Qwen3-0.6B", max_usd=0.4, shard=8, gpu_label="L40S"), 0.4, gpu="L4")
 
-    t0 = time.time()
-    results = list(fn("run_tests").map([tests[i:i + 4] for i in range(0, len(tests), 4)]))
-    results = [r for chunk in results for r in chunk]
-    log_spend("modal", (time.time() - t0) * GPU_PRICE_PER_S["CPU"] * 4, job="run_tests:smoke")
+    results = [r for wave in sandbox_waves(tests, per_call=4) for r in wave]
     bump("tests_run", sum(r["n_tests"] for r in results))
 
     get("/out/cap_smoke", RUNS / "out" / "cap_smoke")

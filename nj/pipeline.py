@@ -122,23 +122,19 @@ def label(wave: int = 64, per_call: int = 6):
     update_stage("label", state="running", started=time.time(), done=len(have), total=len(gens), unit="solutions tested")
     event(f"🏷️ sandbox testing {len(todo):,} solutions on a Modal CPU fleet")
     items = [{"key": g["key"], "pid": g["pid"], "code": extract_code(g["text"])[0], "exploit": extract_exploit(g["turn2"])} for g in todo]
-    chunks = [items[i:i + per_call] for i in range(0, len(items), per_call)]
-    f = fn("run_tests")
+    from nj.run import sandbox_waves
     done = len(have)
-    for w in range(0, len(chunks), wave):
-        if paused_local():
-            update_stage("label", state="paused", note="paused between waves; finished results are saved")
-            raise SystemExit("paused")
-        t0 = time.time()
-        batch = chunks[w:w + wave]
-        out = [r for res in f.map(batch) for r in res]
-        log_spend("modal", (time.time() - t0) * GPU_PRICE_PER_S["CPU"] * min(len(batch), 48) * 2, job="run_tests:main")
-        with open(labels_p, "a", encoding="utf-8") as fh:
-            for r in out:
-                fh.write(json.dumps(r) + "\n")
-        done += len(out)
-        bump("tests_run", sum(r["n_tests"] for r in out))
-        update_stage("label", state="running", done=done, total=len(gens), unit="solutions tested")
+    try:
+        for out in sandbox_waves(items, per_call=per_call, wave=wave):
+            with open(labels_p, "a", encoding="utf-8") as fh:
+                for r in out:
+                    fh.write(json.dumps(r) + "\n")
+            done += len(out)
+            bump("tests_run", sum(r["n_tests"] for r in out))
+            update_stage("label", state="running", done=done, total=len(gens), unit="solutions tested")
+    except SystemExit:
+        update_stage("label", state="paused", note="paused between waves; finished results are saved")
+        raise
     summarize_labels(gens)
     update_stage("label", state="done", done=len(gens), total=len(gens), unit="solutions tested")
 
