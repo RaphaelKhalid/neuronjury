@@ -275,6 +275,102 @@ def falsify_small(**kw) -> dict:
     return _falsify(**kw)
 
 
+# ---------------------------------------------------------------- detection vs use (ablation check, secondary)
+
+def _use_check(tag: str, base: str, max_usd: float, draws: int = 3, gpu_label: str = "H100") -> dict:
+    """/vol/work/use_{tag}.json: {"jurors": [{layer, neuron}], "samples": [{key, read_with, seq, code_pos, lines}], "seed"}.
+    Per sample: per code line, drop in mean log-prob when the jurors are zeroed on code tokens, minus the mean drop
+    for `draws` matched-random neuron sets (same layers, same counts). use = max over lines, in nats."""
+    import numpy as np
+    import torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from nj.capture_core import find_layers
+    spec = json.loads((VOL / "work" / f"use_{tag}.json").read_text())
+    samples = spec["samples"]
+    job = Job(f"use:{tag}", gpu_label, len(samples), "samples", max_usd)
+    mpath = VOL / "models" / base
+    model = AutoModelForCausalLM.from_pretrained(mpath, dtype=torch.bfloat16, device_map={"": 0}).eval()
+    adapters = sorted({s["read_with"] for s in samples} - {"base"})
+    if adapters:
+        model = PeftModel.from_pretrained(model, str(VOL / "adapters" / adapters[0]), adapter_name=adapters[0])
+        for a in adapters[1:]:
+            model.load_adapter(str(VOL / "adapters" / a), adapter_name=a)
+    layers_mod = find_layers(model)
+    F = model.config.intermediate_size
+    rng = np.random.default_rng(spec["seed"])
+    jur = {}
+    for j in spec["jurors"]:
+        jur.setdefault(j["layer"], []).append(j["neuron"])
+    rand_sets = []
+    for _ in range(draws):
+        rs = {}
+        for li, ns in jur.items():
+            pool = np.setdiff1d(np.arange(F), ns)
+            rs[li] = rng.choice(pool, len(ns), replace=False).tolist()
+        rand_sets.append(rs)
+    state = {"zero": None, "pos": None}
+
+    def make_hook(li):
+        def pre(m, a):
+            if state["zero"] is None or li not in state["zero"]:
+                return None
+            x = a[0].clone()
+            idx = torch.tensor(state["zero"][li], device=x.device)
+            sub = x[:, state["pos"]]
+            sub[:, :, idx] = 0
+            x[:, state["pos"]] = sub
+            return (x,)
+        return pre
+    hs = [layers_mod[li].mlp.down_proj.register_forward_pre_hook(make_hook(li)) for li in set(jur) | {l for r in rand_sets for l in r}]
+
+    def code_lp(ids, cp):
+        with torch.no_grad():
+            lg = model(input_ids=ids, use_cache=False).logits[0].float()
+        lp = torch.log_softmax(lg[cp - 1], -1).gather(-1, ids[0, cp][:, None]).squeeze(-1)
+        return lp.cpu().numpy()
+    out = []
+    current = None
+    for s in samples:
+        if job.stop_reason():
+            break
+        if adapters and s["read_with"] != "base" and s["read_with"] != current:
+            model.set_adapter(s["read_with"])
+            current = s["read_with"]
+        ids = torch.tensor([s["seq"]], device="cuda")
+        cp = torch.tensor(s["code_pos"], device="cuda")
+        state["pos"] = cp
+        state["zero"] = None
+        base_lp = code_lp(ids, cp)
+        state["zero"] = jur
+        dj = base_lp - code_lp(ids, cp)
+        dr = []
+        for rs in rand_sets:
+            state["zero"] = rs
+            dr.append(base_lp - code_lp(ids, cp))
+        state["zero"] = None
+        lines = np.array(s["lines"])
+        best, best_line = -1e9, -1
+        for ln in np.unique(lines):
+            m = lines == ln
+            u = dj[m].mean() - np.mean([d[m].mean() for d in dr])
+            if u > best:
+                best, best_line = float(u), int(ln)
+        out.append({"key": s["key"], "use": best, "line": best_line, "jury_drop": float(dj.mean()),
+                    "random_drop": float(np.mean([d.mean() for d in dr]))})
+        job.tick(1)
+    for h in hs:
+        h.remove()
+    (VOL / "out" / f"use_{tag}.json").write_text(json.dumps(out))
+    vol.commit()
+    return job.end("done" if len(out) == len(samples) else "paused")
+
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="H100", timeout=3 * 3600)
+def use_check(**kw) -> dict:
+    return _use_check(**kw)
+
+
 # ---------------------------------------------------------------- TXT: supervision control (text classifier, LoRA)
 
 @app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=3 * 3600)

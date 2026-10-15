@@ -37,9 +37,13 @@ hf_image = (modal.Image.debian_slim(python_version="3.12")
                          "accelerate==1.14.0", "safetensors", "numpy", "hf_transfer")
             .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "TOKENIZERS_PARALLELISM": "false"})
             .add_local_python_source("nj"))
+CU13 = "/usr/local/lib/python3.12/site-packages/nvidia/cu13"  # CUDA toolkit shipped as pip wheels with vLLM 0.31
 vllm_image = (modal.Image.debian_slim(python_version="3.12")
               .pip_install("vllm", "hf_transfer")
-              .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "VLLM_LOGGING_LEVEL": "WARNING", "VLLM_USE_FLASHINFER_SAMPLER": "0"})
+              .apt_install("build-essential")  # host compiler for FlashInfer's JIT sampling kernels
+              .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "VLLM_LOGGING_LEVEL": "WARNING",
+                    "CUDA_HOME": CU13, "PATH": f"{CU13}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "FLASHINFER_WORKSPACE_BASE": "/vol/cache/flashinfer"})  # compiled kernels persist on the volume
               .add_local_python_source("nj"))
 
 
