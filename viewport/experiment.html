@@ -265,6 +265,20 @@ const shown = {}, target = {}, usdKeys = new Set(["modal_usd", "anthropic_usd"])
 $("counters").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="ct"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
 COUNTERS.forEach(([k]) => { shown[k] = 0; target[k] = 0; });
 let liveJobs = [], pulseAt = 0;
+// progress arrives in batches; between batches, estimate it from the job's own measured pace.
+// Never runs ahead of the next real batch (capped just below one batch), and snaps to the true count when it lands.
+const interpDone = (j, hist, now) => {
+  if (!j || j.state !== "running" || !(j.done > 0)) return Number(j?.done || 0);
+  const ch = []; let prev = -1;
+  for (const p of hist || []) if (p.done > prev) { ch.push(p); prev = p.done; }
+  const lastC = ch.length ? ch[ch.length - 1] : { t: j.last || j.start, done: j.done };
+  if (lastC.done !== j.done) return j.done;
+  let rate, jump;
+  if (ch.length >= 3) { rate = (lastC.done - ch[1].done) / Math.max(1, lastC.t - ch[1].t); jump = lastC.done - ch[ch.length - 2].done; }
+  else { rate = j.done / Math.max(1, lastC.t - (j.start || lastC.t)); jump = j.done; }
+  return Math.min(j.total || Infinity, j.done + Math.min(jump * 0.97, rate * Math.max(0, now - lastC.t)));
+};
+let heroJob = null;
 let t0 = null, caps = {}, big = { shown: 0, to: 0 }, last = null;
 
 function fmt(k, v) {
@@ -357,6 +371,9 @@ async function poll() {
     $("kicker").innerHTML = `<u>STAGE ${ci + 1} OF ${STAGES.length}</u> · ${esc((s.state || "").toUpperCase())}`;
     $("title").textContent = n;
     big.to = Number(s.done || 0);
+    const hj = Object.entries(d.modal?.jobs || {}).find(([jk, j]) => jk.split(":")[0] === k && j.state === "running" && Number(j.total) === Number(s.total)
+                                                       && Date.now() / 1000 - (j.last || 0) <= 120);
+    heroJob = hj && s.state === "running" ? { k: hj[0], j: hj[1], total: Number(s.total) } : null;
     $("bigu").textContent = s.total ? `/ ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.unit || "");
     $("bigbar").style.width = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) + "%" : (s.state === "done" ? "100%" : "0%");
     $("note").textContent = s.note || "";
@@ -382,11 +399,14 @@ function frame() {
   for (const [k] of COUNTERS) { const t = target[k], s = shown[k]; if (s === t) continue;
     const step = Math.max(usdKeys.has(k) ? .001 : 1, Math.abs(t - s) * .12); shown[k] = s < t ? Math.min(t, s + step) : Math.max(t, s - step);
     const moving = shown[k] !== t && !usdKeys.has(k) && t > 30; $("v-" + k).textContent = fmt(k, moving ? shown[k] + Math.random() * 9 : shown[k]); }
+  if (heroJob) { const now = Date.now() / 1000, est = interpDone(heroJob.j, last?.history?.jobs?.[heroJob.k], now);
+    big.to = Math.max(Number(heroJob.j.done || 0), Math.floor(est));
+    $("bigbar").style.width = Math.min(100, 100 * est / Math.max(1, heroJob.total)) + "%"; }
   if (big.shown !== big.to) { big.shown = big.shown < big.to ? Math.min(big.to, big.shown + Math.max(1, (big.to - big.shown) * .1)) : big.to;
     $("bign").textContent = Math.round(big.shown !== big.to ? big.shown + Math.random() * 9 : big.shown).toLocaleString("en-US"); }
   if (Date.now() - pulseAt > 250) { pulseAt = Date.now(); const now = Date.now() / 1000;
     // between progress jumps the job is still alive: show its own clock, heartbeat and live cost so something always moves
-    $("pulse").innerHTML = liveJobs.slice(0, 3).map(j => `⏱ ${esc(j.k)} · running <b>${hms((now - j.start) * 1000)}</b> · heartbeat ${Math.max(0, Math.round(now - j.last))} s ago · <b>$${liveUsd(j, now).toFixed(3)}</b>${j.done === 0 && j.total > 0 ? " · warming up (model loading; progress arrives in batches)" : ""}`).join("<br>"); }
+    $("pulse").innerHTML = liveJobs.slice(0, 3).map(j => `⏱ ${esc(j.k)} · running <b>${hms((now - j.start) * 1000)}</b> · heartbeat ${Math.max(0, Math.round(now - j.last))} s ago · <b>$${liveUsd(j, now).toFixed(3)}</b>${j.done === 0 && j.total > 0 ? " · warming up (model loading; progress arrives in batches)" : (heroJob && heroJob.k === j.k ? ` · ${Number(j.done).toLocaleString()} confirmed, big number ≈ estimated between batches` : "")}`).join("<br>"); }
   requestAnimationFrame(frame);
 }
 window.addEventListener("resize", () => last && drawFigures(last));
