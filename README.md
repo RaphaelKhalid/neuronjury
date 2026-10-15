@@ -21,6 +21,18 @@ curl -sL -o source/already-clean.html https://already-clean.goodfire.com
 curl -sL -o source/shelf.json.gz https://already-clean.goodfire.com/neuron-scientist/papers/shelf.json.gz
 ```
 
+## Run, watch, pause
+
+```bash
+python -m nj.all                  # run every stage in order; safe to re-run (finished stages skip, unfinished resume)
+PORT=8790 python -I viewport/server.py   # live monitor at http://localhost:8790/experiment.html
+python -m nj.ctl pause            # or the monitor's "Pause safely" button: jobs finish their batch, save, stop
+python -m nj.ctl resume           # then re-run python -m nj.all
+python -m nj.ctl status           # stage states and spend vs caps
+```
+
+Every GPU job checks the pause flag and its own dollar budget between small batches, and saves to the Modal volume before stopping.
+
 ## Compute
 
 Modal (profile `raphaelkhalid`) for all GPU work. The Anthropic API is used for Haiku monitoring and the neuron-paper agents.
