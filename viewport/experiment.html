@@ -82,6 +82,8 @@
   .bar { height: 1.3vh; border: 1px solid var(--rule); margin: .7vh 0 .5vh;
          background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(42,37,29,.12) 3px 4px); }
   .bar i { display: block; height: 100%; background: var(--green); opacity: .85; transition: width .6s; }
+  .pulse { font: italic 500 clamp(11px, 1.3vh, 14px)/1.35 var(--serif); color: var(--ink2); margin-top: .3vh; }
+  .pulse b { font: normal 700 1em var(--mono); color: var(--green); }
   .note { font: 400 clamp(11px, 1.3vh, 14px)/1.3 var(--mono); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fig0 { position: absolute; top: .6vh; right: .5vw; width: 6.5vw; height: 6.5vw; max-height: 11vh; }
 
@@ -169,6 +171,7 @@
         <div class="big"><span class="n" id="bign">0</span><span class="u" id="bigu"></span></div>
         <div class="bar"><i id="bigbar" style="width:0%"></i></div>
         <div class="note" id="note"></div>
+        <div class="pulse" id="pulse"></div>
       </div>
       <figure class="box plate-fig" id="illusbox">
         <div class="plate-cell">
@@ -244,6 +247,9 @@ const COUNTERS = [
   ["candidates", "candidate poles", "var(--ochre)"], ["jurors", "jurors surviving", "var(--green)"], ["gpu_seconds", "GPU seconds", "var(--ink)"],
   ["modal_usd", "Modal $ / cap", "var(--rust)"], ["anthropic_usd", "Anthropic $ / cap", "var(--slate)"], ["live_jobs", "jobs running now", "var(--green)"], ["events", "events logged", "var(--ink)"],
 ];
+// a running job's cost so far: its own usd counts all of its GPUs, so extend it at its own rate (table = fallback)
+const liveUsd = (j, now) => { const span = (j.last || 0) - (j.start || 0);
+  return j.usd > 0 && span > 5 ? j.usd * Math.max(0, now - j.start) / span : Math.max(0, now - (j.start || now)) * (PRICE[j.gpu] || 0); };
 const PRICE = { "H100": 0.001097, "A100-80GB": 0.000694, "L40S": 0.000542, "A10G": 0.000306, "A10": 0.000306, "L4": 0.000222, "CPU": 0.0000262 };
 const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650" };
 const $ = id => document.getElementById(id);
@@ -258,6 +264,7 @@ const setHTML = (el, h) => { if (el._html !== h) { el._html = h; el.innerHTML = 
 const shown = {}, target = {}, usdKeys = new Set(["modal_usd", "anthropic_usd"]);
 $("counters").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="ct"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
 COUNTERS.forEach(([k]) => { shown[k] = 0; target[k] = 0; });
+let liveJobs = [], pulseAt = 0;
 let t0 = null, caps = {}, big = { shown: 0, to: 0 }, last = null;
 
 function fmt(k, v) {
@@ -357,9 +364,11 @@ async function poll() {
   STAGES.forEach(([k], i) => { const s = stages[k] || { state: "pending" }, row = stageRows[i];
     const sub = s.total ? `${Number(s.done || 0).toLocaleString()} / ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.note || "");
     setText(row.sb, sub); setText(row.chip, s.state || "pending"); const cls = `chip ${s.state || "pending"}`; if (row.chip.className !== cls) row.chip.className = cls; });
+  liveJobs = Object.entries(d.modal?.jobs || {}).filter(([, j]) => j.state === "running" && Date.now() / 1000 - (j.last || 0) <= 120)
+    .map(([k, j]) => ({ k, start: j.start || 0, last: j.last || 0, gpu: j.gpu, usd: Number(j.usd || 0), done: j.done || 0, total: j.total || 0 }));
   const jobs = Object.entries(d.modal?.jobs || {}).map(([k, j]) => [k, { ...j }]).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 8);
   setHTML($("jobs"), jobs.map(([k, j]) => { const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120; if (stale) j.state = "failed";
-    const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start); const usd = Math.max(0, end - (j.start || end)) * (PRICE[j.gpu] || 0);
+    const usd = j.state === "running" ? liveUsd(j, Date.now() / 1000) : Number(j.usd || 0);
     return `<tr><td title="${esc(k)}">${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`; }).join("")
     || `<tr><td colspan="5" class="cap">no remote jobs yet</td></tr>`);
   $("merr").textContent = d.modal?.ok === false && d.modal?.err ? `Modal link: ${d.modal.err}` : "";
@@ -375,6 +384,9 @@ function frame() {
     const moving = shown[k] !== t && !usdKeys.has(k) && t > 30; $("v-" + k).textContent = fmt(k, moving ? shown[k] + Math.random() * 9 : shown[k]); }
   if (big.shown !== big.to) { big.shown = big.shown < big.to ? Math.min(big.to, big.shown + Math.max(1, (big.to - big.shown) * .1)) : big.to;
     $("bign").textContent = Math.round(big.shown !== big.to ? big.shown + Math.random() * 9 : big.shown).toLocaleString("en-US"); }
+  if (Date.now() - pulseAt > 250) { pulseAt = Date.now(); const now = Date.now() / 1000;
+    // between progress jumps the job is still alive: show its own clock, heartbeat and live cost so something always moves
+    $("pulse").innerHTML = liveJobs.slice(0, 3).map(j => `⏱ ${esc(j.k)} · running <b>${hms((now - j.start) * 1000)}</b> · heartbeat ${Math.max(0, Math.round(now - j.last))} s ago · <b>$${liveUsd(j, now).toFixed(3)}</b>${j.done === 0 && j.total > 0 ? " · warming up (model loading; progress arrives in batches)" : ""}`).join("<br>"); }
   requestAnimationFrame(frame);
 }
 window.addEventListener("resize", () => last && drawFigures(last));
