@@ -39,7 +39,7 @@ hf_image = (modal.Image.debian_slim(python_version="3.12")
             .add_local_python_source("nj"))
 vllm_image = (modal.Image.debian_slim(python_version="3.12")
               .pip_install("vllm", "hf_transfer")
-              .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "VLLM_LOGGING_LEVEL": "WARNING"})
+              .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "VLLM_LOGGING_LEVEL": "WARNING", "VLLM_USE_FLASHINFER_SAMPLER": "0"})
               .add_local_python_source("nj"))
 
 
