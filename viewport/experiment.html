@@ -248,8 +248,13 @@ const PRICE = { "H100": 0.001097, "A100-80GB": 0.000694, "L40S": 0.000542, "A10G
 const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650" };
 const $ = id => document.getElementById(id);
 // a leading emoji (with variation selectors / ZWJ sequences / keycaps) gets its own column in the event log
-const EMOJI_LEAD = /^\s*((?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[#*0-9]️?⃣)(?:️|‍(?:\p{Extended_Pictographic}|\p{Emoji_Component})|\p{Emoji_Modifier})*)\s*/u;
+const EMOJI_LEAD = /^\s*((?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[#*0-9]\uFE0F?\u20E3)(?:\uFE0F|\u200D(?:\p{Extended_Pictographic}|\p{Emoji_Component})|\p{Emoji_Modifier})*)\s*/u;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+// stage rows are built once so the engraved icons are never re-created (re-creating <img> made them flicker on phones)
+$("stages").innerHTML = STAGES.map(([k, n], i) => `<div class="st"><span class="no">${i + 1}.</span><span class="ic"><img src="assets/icon-${i + 1}.png" alt="" decoding="async" onerror="this.remove()"></span><div style="min-width:0"><div class="nm">${esc(n)}</div><div class="sb"></div></div><span class="chip pending">pending</span></div>`).join("");
+const stageRows = [...$("stages").children].map(r => ({ sb: r.querySelector(".sb"), chip: r.querySelector(".chip") }));
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+const setHTML = (el, h) => { if (el._html !== h) { el._html = h; el.innerHTML = h; } };
 const shown = {}, target = {}, usdKeys = new Set(["modal_usd", "anthropic_usd"]);
 $("counters").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="ct"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
 COUNTERS.forEach(([k]) => { shown[k] = 0; target[k] = 0; });
@@ -349,18 +354,18 @@ async function poll() {
     $("bigbar").style.width = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) + "%" : (s.state === "done" ? "100%" : "0%");
     $("note").textContent = s.note || "";
   }
-  $("stages").innerHTML = STAGES.map(([k, n], i) => { const s = stages[k] || { state: "pending" };
+  STAGES.forEach(([k], i) => { const s = stages[k] || { state: "pending" }, row = stageRows[i];
     const sub = s.total ? `${Number(s.done || 0).toLocaleString()} / ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.note || "");
-    return `<div class="st"><span class="no">${i + 1}.</span><span class="ic"><img src="assets/icon-${i + 1}.png" alt="" onerror="this.remove()"></span><div style="min-width:0"><div class="nm">${esc(n)}</div><div class="sb">${esc(sub)}</div></div><span class="chip ${esc(s.state)}">${esc(s.state)}</span></div>`; }).join("");
+    setText(row.sb, sub); setText(row.chip, s.state || "pending"); const cls = `chip ${s.state || "pending"}`; if (row.chip.className !== cls) row.chip.className = cls; });
   const jobs = Object.entries(d.modal?.jobs || {}).map(([k, j]) => [k, { ...j }]).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 8);
-  $("jobs").innerHTML = jobs.map(([k, j]) => { const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120; if (stale) j.state = "failed";
+  setHTML($("jobs"), jobs.map(([k, j]) => { const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120; if (stale) j.state = "failed";
     const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start); const usd = Math.max(0, end - (j.start || end)) * (PRICE[j.gpu] || 0);
     return `<tr><td title="${esc(k)}">${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`; }).join("")
-    || `<tr><td colspan="5" class="cap">no remote jobs yet</td></tr>`;
+    || `<tr><td colspan="5" class="cap">no remote jobs yet</td></tr>`);
   $("merr").textContent = d.modal?.ok === false && d.modal?.err ? `Modal link: ${d.modal.err}` : "";
-  $("ev").innerHTML = (st.events || []).slice().reverse().slice(0, 150).map(x => {
+  setHTML($("ev"), (st.events || []).slice().reverse().slice(0, 150).map(x => {
     const m = String(x.text || "").match(EMOJI_LEAD), ic = m ? m[1] : "", text = m ? x.text.slice(m[0].length) : x.text;
-    return `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span><span class="ic">${esc(ic)}</span><span class="${x.kind === "error" ? "error" : ""}">${esc(text)}</span></li>`; }).join("");
+    return `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span><span class="ic">${esc(ic)}</span><span class="${x.kind === "error" ? "error" : ""}">${esc(text)}</span></li>`; }).join(""));
   drawFigures(d);
 }
 function frame() {
