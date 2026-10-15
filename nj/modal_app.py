@@ -57,6 +57,7 @@ class Job:
         self._paused = False
         self.note = note
         self._ended = False
+        self.extra = {}  # last reported metrics (e.g. loss) ride along on every heartbeat
         self.push("running")
         import threading
 
@@ -76,11 +77,12 @@ class Job:
     def push(self, state: str, **extra):
         progress[self.name] = {"gpu": self.gpu.split(":")[0], "start": self.t0, "last": time.time(), "done": self.done,
                                "total": self.total, "unit": self.unit, "state": state, "usd": round(self.usd(), 4),
-                               "note": self.note, **extra}
+                               "note": self.note, **{**self.extra, **extra}}
         self._last_push = time.time()
 
     def tick(self, n: int = 1, **extra):
         self.done += n
+        self.extra.update(extra)
         if time.time() - self._last_push > 2:
             self.push("running", **extra)
 
