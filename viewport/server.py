@@ -229,6 +229,37 @@ def feed_snapshot():
 
 RUNS = os.path.join(ROOT, "runs")
 MODAL_PROGRESS = {"jobs": {}, "ok": False, "err": "", "t": 0}
+HISTORY = {"jobs": {}, "spend": []}  # per-job metric series + spend series, persisted in runs/history.json
+
+
+def _load_history():
+    try:
+        with open(os.path.join(ROOT, "runs", "history.json"), encoding="utf-8") as f:
+            HISTORY.update(json.load(f))
+    except Exception:
+        pass
+
+
+def _save_history():
+    try:
+        p = os.path.join(ROOT, "runs", "history.json")
+        with open(p + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(HISTORY, f)
+        os.replace(p + ".tmp", p)
+    except Exception:
+        pass
+
+
+def _record(jobs, now):
+    for k, j in jobs.items():
+        ser = HISTORY["jobs"].setdefault(k, [])
+        pt = {"t": now, "done": j.get("done", 0), "total": j.get("total", 0), "usd": j.get("usd", 0), "state": j.get("state")}
+        if j.get("loss") is not None:
+            pt["loss"] = j["loss"]
+        last = ser[-1] if ser else None
+        if last is None or last["done"] != pt["done"] or last.get("loss") != pt.get("loss") or last["state"] != pt["state"]:
+            ser.append(pt)
+            del ser[:-3000]
 GPU_PRICE = {"H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542,
              "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131}
 
@@ -246,13 +277,21 @@ def poll_modal_forever():
     while True:
         try:
             jobs = {k: v for k, v in d.items()}
-            MODAL_PROGRESS.update(jobs=jobs, ok=True, err="", t=time.time(), pause=bool(c.get("pause", False)))
+            now = time.time()
+            MODAL_PROGRESS.update(jobs=jobs, ok=True, err="", t=now, pause=bool(c.get("pause", False)))
+            _record(jobs, now)
+            if not HISTORY["spend"] or now - HISTORY["spend"][-1]["t"] > 20:
+                snap = experiment_snapshot(with_history=False)
+                HISTORY["spend"].append({"t": now, "usd": snap["spend"]["modal_logged"] + snap["spend"]["modal_live"],
+                                         "anthropic": snap["spend"].get("anthropic", 0)})
+                del HISTORY["spend"][:-3000]
+                _save_history()
         except Exception as e:
             MODAL_PROGRESS.update(ok=False, err=str(e)[:200])
         time.sleep(3)
 
 
-def experiment_snapshot():
+def experiment_snapshot(with_history=True):
     import time
     try:
         with open(os.path.join(RUNS, "status.json"), encoding="utf-8") as f:
@@ -283,7 +322,8 @@ def experiment_snapshot():
             caps = json.load(f)["spend_caps_usd"]
     except Exception:
         caps = {}
-    return {"status": st, "modal": MODAL_PROGRESS, "spend": spend, "caps": caps,
+    hist = {"jobs": {k: v for k, v in HISTORY["jobs"].items()}, "spend": HISTORY["spend"]} if with_history else {}
+    return {"status": st, "modal": MODAL_PROGRESS, "spend": spend, "caps": caps, "history": hist,
             "paused": os.path.exists(os.path.join(RUNS, "PAUSE")) or bool(MODAL_PROGRESS.get("pause"))}
 
 
@@ -335,6 +375,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     import threading
+    _load_history()
     threading.Thread(target=poll_modal_forever, daemon=True).start()
     print(f"viewport on http://localhost:{PORT}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
