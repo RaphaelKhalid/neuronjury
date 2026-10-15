@@ -199,7 +199,7 @@ a:focus-visible { outline: 2px solid var(--pos); outline-offset: 2px; }
 
   <h3>Pick your budget 💸</h3>
   <div class="tiers" id="tiers"></div>
-  <p class="mute">Calendar: realistically 2–6 weeks, mostly debugging. Build and debug everything on Qwen3-0.6B/1.7B/8B on free notebooks first. Rent an A100 only for the final capture runs, with an auto-stop script.</p>
+  <p class="mute">Build and debug everything on Qwen3-0.6B/1.7B/8B on free notebooks first. Rent an A100 only for the final capture runs, with an auto-stop script.</p>
 </section>
 
 <section>
@@ -278,13 +278,13 @@ means: [
  ["🏗️","Monitorability might be designed in","Residual connections and LayerNorm turned a ~5% readable layer into ~99% at the same size. MoE experts look extremely selective. Easier-to-watch models could be an architecture choice."]
 ],
 steps: [
- ["🧾","Pre-register, then build on free hardware","Lock the WIN/LOSE/CONTINUE rules, splits and seeds, and publish a hash. Port Redwood's game simulator and check it reproduces ~0.66 safety from the paper's counts. Write the 3-channel SwiGLU hook and debug it on small Qwen models in free notebooks.","3–4 days · $0"],
- ["🏭","Load the data and generate code","pip install control-arena (pin the version). Test pool: 2,118 eligible interview problems from apps-control-arena. Training data comes from the separate APPS train split, so nothing leaks. Run Qwen3-32B in bf16 on vLLM and generate honest solutions plus backdoor attacks (keep ≥150 working ones).","2–3 days · ~$9 API + GPU"],
- ["🗣️","Run the black-box monitors","Faithful 3-step GPT-3.5 monitor, gpt-4.1-nano, Qwen reading its own code, the trained text classifier, and Claude Haiku 5.5 as a stronger-model ceiling.","1–2 days · ~$7 API"],
- ["🧲","Capture activations","On one A100 80GB with auto-stop, replay every sample and save statistics for all 1.64M MLP neurons, the residual stream at 6 layers, and per-token log-probs. Train the probes in the same session.","1 day · ~8 A100-hours"],
- ["⚖️","Build and freeze the Neuron Jury","Rank all neurons by how well they separate backdoor from honest code (with false-discovery control), have agents write neuron papers, run the hashed near-miss tests, keep the survivors, fit a sparse weighted vote, and freeze it with a SHA.","2–3 days · ~2 A100-hours + ~$3"],
- ["🧬","Train the sneaky coder","QLoRA-fine-tune Qwen3-32B to plant backdoors with no written plan. Train an identical “sham” honest fine-tune too, so no monitor can win just by spotting the fine-tune. Check the coder passes the threat test.","2–3 days · ~5 GPU-hours"],
- ["🎲","Unseal, attack, decide","Run the game (2,000 simulated runs) and 1,000 bootstrap resamples. Run the monitor-aware attacker. Apply the pre-registered rules mechanically, then publish the code, scores, Jury neuron papers and the drop-in I/O format.","2 days · GPU + a little API"]
+ ["🧾","Pre-register, then build on free hardware","Lock the WIN/LOSE/CONTINUE rules, splits and seeds, and publish a hash. Port Redwood's game simulator and check it reproduces ~0.66 safety from the paper's counts. Write the 3-channel SwiGLU hook and debug it on small Qwen models in free notebooks.","$0"],
+ ["🏭","Load the data and generate code","pip install control-arena (pin the version). Test pool: 2,118 eligible interview problems from apps-control-arena. Training data comes from the separate APPS train split, so nothing leaks. Run Qwen3-32B in bf16 on vLLM and generate honest solutions plus backdoor attacks (keep ≥150 working ones).","~$9 API + GPU"],
+ ["🗣️","Run the black-box monitors","Faithful 3-step GPT-3.5 monitor, gpt-4.1-nano, Qwen reading its own code, the trained text classifier, and Claude Haiku 5.5 as a stronger-model ceiling.","~$7 API"],
+ ["🧲","Capture activations","On one A100 80GB with auto-stop, replay every sample and save statistics for all 1.64M MLP neurons, the residual stream at 6 layers, and per-token log-probs. Train the probes in the same session.","~8 A100-hours"],
+ ["⚖️","Build and freeze the Neuron Jury","Rank all neurons by how well they separate backdoor from honest code (with false-discovery control), have agents write neuron papers, run the hashed near-miss tests, keep the survivors, fit a sparse weighted vote, and freeze it with a SHA.","~2 A100-hours + ~$3"],
+ ["🧬","Train the sneaky coder","QLoRA-fine-tune Qwen3-32B to plant backdoors with no written plan. Train an identical “sham” honest fine-tune too, so no monitor can win just by spotting the fine-tune. Check the coder passes the threat test.","~5 GPU-hours"],
+ ["🎲","Unseal, attack, decide","Run the game (2,000 simulated runs) and 1,000 bootstrap resamples. Run the monitor-aware attacker. Apply the pre-registered rules mechanically, then publish the code, scores, Jury neuron papers and the drop-in I/O format.","GPU + a little API"]
 ],
 tiers: [
  ["$20","Scout run","~$17 cash. No fine-tuned coder: attacks come from prompting. 1,000 test problems, a weaker attacker. You get every monitor's catch rate and the full safety numbers.","Can't claim the Jury reads intent. Best possible result: CONTINUE, or an early LOSE signal.",false],
@@ -293,21 +293,21 @@ tiers: [
 ],
 rank: [
  ["1","🧨 Backdoored code (Redwood-style)","Cheapest and clearest. It uses the exact model the essay audited, and the label is objective: a backdoor either changes the output or it doesn't. It's single-turn, fits on one GPU, and its capture pipeline feeds the other two games."],
- ["2","🕵️ Agentic sabotage (SHADE / BASH-Arena)","Most realistic and most convincing, and off-the-shelf FIBS probes exist for Qwen3.5-27B. But capturing that model's hybrid architecture is a 3–4 week lift, the public scenarios are few (±15–18 pt intervals), and it needs ~$97. Phase two."],
+ ["2","🕵️ Agentic sabotage (SHADE / BASH-Arena)","Most realistic and most convincing, and off-the-shelf FIBS probes exist for Qwen3.5-27B. But capturing that model's hybrid architecture is a big engineering lift, the public scenarios are few (±15–18 pt intervals), and it needs ~$97. Phase two."],
  ["3","🎰 Reward hacking & sandbagging","Released organisms and Goodfire probes help, but the science is weakest. The hacks are visible in the tool calls anyway, and the sandbagger's trigger is so broad that detecting the trigger looks the same as detecting intent. Run it later as a cheap add-on."]
 ],
 agenda: [
- ["🧨","Run experiment #1","Neuron Jury vs GPT-3.5, same-model black-box, and probes on backdoored code.","$20–100 · 2–6 wk"],
- ["💉","Injection-proof duel","Hide monitor-directed instructions in string literals. The Jury reads no text; GPT-3.5 does. A likely early white-box win.","+$20 · 2 days"],
- ["🩻","Glass-box hybrid","Give GPT-3.5 the Jury's reason string and measure the boost. Probably the real deployment story.","+$20 · 2 days"],
- ["🪞","Intent-premium deep-dive","Does the gap between the sneaky fine-tune and the honest model hold across seeds and backdoor styles?","$50 · 1 wk"],
- ["🥷","Obfuscation-tax duel","Train the attacker against the Jury. Does evading it cost backdoor success? Where does the computation move?","$100 · 2 wk"],
- ["🔁","Blue re-discovery loop","After evasion, re-run discovery. Did the computation reroute through nearby readable neurons?","$100 · 1 wk"],
- ["🧬","Neuron Diff for planted goals","Diff base vs fine-tune neurons on public backdoored models, to find the backdoor without firing the trigger.","$25 · 1 wk"],
- ["✂️","Surgical defer","Clip flagged neurons and regenerate, instead of handing the task to a weaker model.","$30 · 1 wk"],
- ["🎭","Sandbagging track","Port the AISI sandbagger and compare hedge/settling neurons vs a CoT judge, with fixed confounds.","$50 · 2 wk"],
- ["🕵️","Agentic sabotage","Run on SHADE-Arena with FIBS probes, reusing this capture pipeline.","$50–100+ · 3–4 wk"],
- ["📈","The scaling bet","From Qwen3 0.6B to 32B, does white-box improve with size while a fixed black-box monitor falls behind?","$100 · 2 wk"],
+ ["🧨","Run experiment #1","Neuron Jury vs GPT-3.5, same-model black-box, and probes on backdoored code.","$20–100"],
+ ["💉","Injection-proof duel","Hide monitor-directed instructions in string literals. The Jury reads no text; GPT-3.5 does. A likely early white-box win.","+$20"],
+ ["🩻","Glass-box hybrid","Give GPT-3.5 the Jury's reason string and measure the boost. Probably the real deployment story.","+$20"],
+ ["🪞","Intent-premium deep-dive","Does the gap between the sneaky fine-tune and the honest model hold across seeds and backdoor styles?","$50"],
+ ["🥷","Obfuscation-tax duel","Train the attacker against the Jury. Does evading it cost backdoor success? Where does the computation move?","$100"],
+ ["🔁","Blue re-discovery loop","After evasion, re-run discovery. Did the computation reroute through nearby readable neurons?","$100"],
+ ["🧬","Neuron Diff for planted goals","Diff base vs fine-tune neurons on public backdoored models, to find the backdoor without firing the trigger.","$25"],
+ ["✂️","Surgical defer","Clip flagged neurons and regenerate, instead of handing the task to a weaker model.","$30"],
+ ["🎭","Sandbagging track","Port the AISI sandbagger and compare hedge/settling neurons vs a CoT judge, with fixed confounds.","$50"],
+ ["🕵️","Agentic sabotage","Run on SHADE-Arena with FIBS probes, reusing this capture pipeline.","$50–100+"],
+ ["📈","The scaling bet","From Qwen3 0.6B to 32B, does white-box improve with size while a fixed black-box monitor falls behind?","$100"],
  ["📜","Release the drop-in benchmark","Publish traces, labels, scores and the I/O format so any future monitor can compete head-to-head.","$0 · ongoing"]
 ],
 oq: [
@@ -361,7 +361,7 @@ const esc = s => String(s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;",
 $("tldr").innerHTML = D.tldr.map(([e, t]) => `<li><span>${e}</span><span>${esc(t)}</span></li>`).join("");
 $("nums").innerHTML = D.nums.map(([v, l, c, neg]) => `<div class="num"><b class="${neg ? "n" : ""}">${esc(v)}</b><span>${esc(l)}</span><small>${esc(c)}</small></div>`).join("");
 $("means").innerHTML = D.means.map(([e, t, b]) => `<div class="card"><h3>${e} ${esc(t)}</h3><p>${esc(b)}</p></div>`).join("");
-$("steps").innerHTML = D.steps.map(([e, t, d, m]) => `<li><div><h3>${e} ${esc(t)}</h3><p>${esc(d)}</p><div class="meta">⏱ ${esc(m)}</div></div></li>`).join("");
+$("steps").innerHTML = D.steps.map(([e, t, d, m]) => `<li><div><h3>${e} ${esc(t)}</h3><p>${esc(d)}</p><div class="meta">💸 ${esc(m)}</div></div></li>`).join("");
 $("tiers").innerHTML = D.tiers.map(([p, tag, d, c, star]) => `<div class="tier ${star ? "star" : ""}"><span class="tag">${esc(tag)}</span><div class="price">${p}</div><p>${esc(d)}</p><p class="claim">🧾 ${esc(c)}</p></div>`).join("");
 $("rank").innerHTML = D.rank.map(([r, t, d]) => `<div><span class="r">#${r}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`).join("");
 $("agenda").innerHTML = D.agenda.map(([e, t, w, c]) => `<div><span>${e}</span><div><h3>${esc(t)}</h3><p>${esc(w)}</p></div><span class="c">${esc(c)}</span></div>`).join("");
