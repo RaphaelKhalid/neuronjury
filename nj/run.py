@@ -35,9 +35,27 @@ def put(local: Path, remote: str):
     sh(MODAL + ["volume", "put", "--force", MODAL_VOLUME, str(local), remote])
 
 
-def get(remote: str, local: Path):
-    local.parent.mkdir(parents=True, exist_ok=True)
-    sh(MODAL + ["volume", "get", "--force", MODAL_VOLUME, remote, str(local)])
+def get(remote: str, local: Path) -> int:
+    """Download a file or folder from the volume via the Python API (the CLI silently writes nothing on Windows).
+    Returns the number of files written; raises if nothing was found."""
+    import modal
+    vol = modal.Volume.from_name(MODAL_VOLUME)
+    remote = remote.strip("/")
+    local = Path(local)
+    entries = [e for e in vol.iterdir(remote, recursive=True) if "FILE" in str(getattr(e.type, "name", e.type)).upper()]
+    if not entries:
+        raise RuntimeError(f"nothing on the volume at {remote}")
+    single = len(entries) == 1 and entries[0].path.strip("/") == remote
+    n = 0
+    for e in entries:
+        rel = Path(e.path.strip("/")).name if single else Path(e.path.strip("/")).relative_to(remote)
+        dest = local if single else local / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as fh:
+            for chunk in vol.read_file(e.path):
+                fh.write(chunk)
+        n += 1
+    return n
 
 
 def upload_inputs():
@@ -206,9 +224,13 @@ def smoke():
     get("/out/cap_smoke", RUNS / "out" / "cap_smoke")
     import numpy as np
     shards = sorted((RUNS / "out" / "cap_smoke").rglob("*.npz"))
+    if len(gens) != len(work) or not shards:
+        update_stage("smoke", state="failed", note=f"hollow run: {len(gens)}/{len(work)} generations, {len(shards)} shards")
+        raise SystemExit("smoke gate: empty outputs")
+    n_cap = sum(len(json.loads(p.read_text())) for p in (RUNS / "out" / "cap_smoke").rglob("*.keys.json"))
     arr = np.load(shards[0])
     gate = {
-        "generations": len(gens),
+        "generations": len(gens), "captured_samples": n_cap,
         "code_tokens_found": sum(1 for x in cap if x["code_pos"]),
         "lp_diff_mean": res.get("lp_diff_mean"), "lp_diff_p99": res.get("lp_diff_p99"),
         "mlp_max_shape": list(arr["mlp_max"].shape), "resid_shape": list(arr["resid"].shape),
@@ -216,8 +238,8 @@ def smoke():
         "exploits_given": sum(r["has_exploit"] for r in results),
     }
     (RUNS / "smoke_gate.json").write_text(json.dumps(gate, indent=1))
-    ok = (gate["code_tokens_found"] >= 0.75 * len(gens) and gate["lp_diff_mean"] is not None and gate["lp_diff_mean"] < 0.1
-          and arr["mlp_max"].shape[2] == 4)
+    ok = (n_cap == len(gens) and gate["code_tokens_found"] >= 0.75 * len(gens) and gate["lp_diff_mean"] is not None
+          and gate["lp_diff_mean"] < 0.1 and arr["mlp_max"].shape[2] == 4 and len(results) == len(gens))
     update_stage("smoke", state="done" if ok else "failed", done=6 if ok else 5, total=6, unit="gates passed",
                  note=f"lp diff {gate['lp_diff_mean']:.4f} nats (vLLM vs HF); {gate['passes']}/{gate['tests_judged']} pass tests; shapes {gate['mlp_max_shape']}")
     event(("✅" if ok else "❌") + f" smoke gate: {json.dumps(gate)}")
