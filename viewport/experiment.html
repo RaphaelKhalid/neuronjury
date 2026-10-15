@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuron Jury Live</title>
+<style>
+  :root {
+    --bg: #000; --fg: #f3f1ec; --dim: #8a8d93; --line: #1b1d21;
+    --pos: #ffb547; --neg: #5cc8ff; --ok: #5fe0a0; --bad: #ff6b7a; --warn: #ffd166;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); padding: 18px clamp(16px, 3vw, 40px) 48px; }
+  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font: 700 13px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .live { color: var(--bad); display: inline-flex; gap: 8px; align-items: center; }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; animation: p 1s infinite; }
+  .live.paused { color: var(--warn); }
+  @keyframes p { 50% { opacity: .25; } }
+  .clock { margin-left: auto; color: var(--fg); font-size: 20px; font-variant-numeric: tabular-nums; }
+  button { font: 800 15px/1 var(--mono); letter-spacing: .08em; padding: 12px 18px; border: 2px solid; background: #000; cursor: pointer; text-transform: uppercase; }
+  button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  #pause { color: var(--bad); border-color: var(--bad); }
+  #resume { color: var(--ok); border-color: var(--ok); }
+  .hero { margin: 28px 0 18px; display: grid; gap: 10px; }
+  .kicker { font: 700 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--pos); }
+  h1 { margin: 0; font-size: clamp(32px, 6vw, 84px); line-height: 1.02; font-weight: 900; letter-spacing: -.02em; }
+  .big { font: 900 clamp(48px, 10vw, 150px)/.9 var(--mono); color: var(--ok); font-variant-numeric: tabular-nums; text-shadow: 0 0 26px rgba(95,224,160,.3); }
+  .big small { font-size: .3em; color: var(--dim); margin-left: 12px; }
+  .bar { height: 6px; background: #121417; }
+  .bar i { display: block; height: 100%; background: var(--ok); transition: width .5s; }
+  .note { color: #bdbdbd; font-size: 17px; max-width: 80ch; min-height: 1.4em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin: 18px 0 28px; }
+  .c { padding: 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+  .c .v { font: 900 clamp(22px, 2.4vw, 36px)/1 var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .c .k { margin-top: 8px; font: 700 11px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 28px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  h2 { font: 700 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
+  .stage { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .stage .n { font-weight: 800; }
+  .stage .s { font: 600 12px/1.3 var(--mono); color: var(--dim); }
+  .chip { font: 800 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+  .chip.running { color: var(--ok); border-color: var(--ok); animation: p 1.2s infinite; }
+  .chip.done { color: var(--neg); border-color: #1d3a4a; }
+  .chip.paused { color: var(--warn); border-color: var(--warn); }
+  .chip.failed { color: var(--bad); border-color: var(--bad); }
+  .mini { grid-column: 2 / 4; height: 3px; background: #121417; }
+  .mini i { display: block; height: 100%; background: var(--neg); }
+  table { width: 100%; border-collapse: collapse; font: 12.5px/1.4 var(--mono); }
+  td, th { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 700; }
+  .tbl { overflow-x: auto; margin-bottom: 24px; }
+  .ev { list-style: none; margin: 0; padding: 0; font: 12.5px/1.5 var(--mono); color: #a7a9ae; max-height: 340px; overflow: auto; }
+  .ev li { padding: 3px 0; border-bottom: 1px solid #0e0f11; }
+  .ev .ts { color: #4b4e54; margin-right: 8px; }
+  .err { color: var(--bad); font: 12px var(--mono); }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="live" id="live"><i></i><b id="livetxt">LIVE</b></span>
+    <span>Neuron Jury · experiment</span>
+    <span class="clock" id="clock">00:00:00.000</span>
+    <button id="pause" type="button">⏸ Pause safely</button>
+    <button id="resume" type="button" hidden>▶ Resume</button>
+  </div>
+
+  <section class="hero">
+    <div class="kicker" id="kicker">waiting for the first stage</div>
+    <h1 id="title">Standing by</h1>
+    <div class="big"><span id="bign">0</span><small id="bigu"></small></div>
+    <div class="bar"><i id="bigbar" style="width:0%"></i></div>
+    <div class="note" id="note"></div>
+  </section>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="cols">
+    <div>
+      <h2>Pipeline</h2>
+      <div id="stages"></div>
+    </div>
+    <div>
+      <h2>Modal jobs (GPU / CPU)</h2>
+      <div class="tbl"><table><thead><tr><th>job</th><th>hw</th><th>progress</th><th>$</th><th>state</th></tr></thead><tbody id="jobs"></tbody></table></div>
+      <div class="err" id="merr"></div>
+      <h2>Event log</h2>
+      <ul class="ev" id="ev"></ul>
+    </div>
+  </div>
+
+<script>
+const STAGES = [
+  ["prereg", "🔒", "Pre-registration frozen"], ["data", "🧩", "Puzzles + training data built"],
+  ["smoke", "🧪", "Readiness checks (free, small Qwen)"], ["weights", "💾", "Model weights staged on Modal"],
+  ["finetune", "🧬", "Training the coders (B, A, twin)"], ["generate", "🏭", "Coders write code"],
+  ["label", "🏷️", "Testing every solution in a sandbox"], ["threat_gate", "✅", "Threat gate"],
+  ["bb_monitors", "👀", "Black-box monitors score code"], ["capture", "📹", "Recording neurons (DISC + CAL)"],
+  ["discovery", "🔍", "Searching 6.5M readings"], ["papers", "📝", "Writing neuron papers"],
+  ["falsify", "🧪", "Prove-it-wrong tests"], ["jury_freeze", "⚖️", "Jury frozen + hashed"],
+  ["test_capture", "🔓", "Unsealing TEST"], ["attacker", "🥷", "Monitor-aware attacker"],
+  ["scoring", "📊", "Scoring + 2,000 games"], ["verdict", "🏁", "Verdict"],
+];
+const COUNTERS = [
+  ["puzzles", "puzzles ready", "var(--fg)"], ["ft_examples", "training examples", "var(--fg)"],
+  ["samples_generated", "solutions written", "var(--pos)"], ["tests_run", "sandbox tests run", "var(--fg)"],
+  ["backdoors_working", "working backdoors", "var(--bad)"], ["honest_ok", "honest solutions OK", "var(--ok)"],
+  ["monitor_scores", "monitor scores", "var(--neg)"], ["tokens_captured", "tokens recorded", "var(--fg)"],
+  ["readings_recorded", "neuron readings recorded", "var(--pos)"], ["candidates", "candidate poles", "var(--pos)"],
+  ["jurors", "jurors surviving", "var(--ok)"], ["gpu_seconds", "GPU seconds", "var(--fg)"],
+  ["modal_usd", "Modal $ (of cap)", "var(--warn)"], ["anthropic_usd", "Anthropic $ (of cap)", "var(--warn)"],
+];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const shown = {}, target = {}, fmtKind = {};
+$("grid").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="c"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
+COUNTERS.forEach(([k]) => { shown[k] = 0; target[k] = 0; });
+fmtKind.modal_usd = fmtKind.anthropic_usd = "usd";
+let t0 = null, big = { from: 0, to: 0, shown: 0 }, caps = {};
+
+function fmt(k, v) {
+  if (fmtKind[k] === "usd") return "$" + v.toFixed(2) + (caps[k] ? ` / ${caps[k]}` : "");
+  return Math.round(v).toLocaleString("en-US");
+}
+function hms(ms) {
+  ms = Math.max(0, ms); const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(Math.floor(ms / 3.6e6))}:${p(Math.floor(ms / 6e4) % 60)}:${p(Math.floor(ms / 1000) % 60)}.${p(Math.floor(ms % 1000), 3)}`;
+}
+
+async function poll() {
+  let d;
+  try { d = await (await fetch("/api/experiment", { cache: "no-store" })).json(); } catch (e) { return; }
+  const st = d.status || {}, stages = st.stages || {}, cnt = st.counters || {};
+  caps = { modal_usd: d.caps?.modal, anthropic_usd: d.caps?.anthropic };
+  for (const [k] of COUNTERS) target[k] = Number(cnt[k] || 0);
+  target.modal_usd = (d.spend?.modal_logged || 0) + (d.spend?.modal_live || 0);
+  target.anthropic_usd = d.spend?.anthropic || 0;
+  const starts = Object.values(stages).map(s => s.started).filter(Boolean);
+  if (starts.length) t0 = Math.min(...starts) * 1000;
+  // paused?
+  $("pause").hidden = d.paused; $("resume").hidden = !d.paused;
+  $("live").classList.toggle("paused", d.paused); $("livetxt").textContent = d.paused ? "PAUSED" : "LIVE";
+  // current stage = first running, else last done
+  let cur = STAGES.find(([k]) => stages[k]?.state === "running") || STAGES.find(([k]) => stages[k]?.state === "paused");
+  if (!cur) cur = [...STAGES].reverse().find(([k]) => stages[k]?.state === "done");
+  if (cur) {
+    const s = stages[cur[0]] || {};
+    $("kicker").textContent = `stage ${STAGES.indexOf(cur) + 1} of ${STAGES.length} · ${s.state || ""}`;
+    $("title").textContent = `${cur[1]} ${cur[2]}`;
+    big.to = Number(s.done || 0);
+    $("bigu").textContent = s.total ? `/ ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.unit || "");
+    $("bigbar").style.width = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) + "%" : (s.state === "done" ? "100%" : "0%");
+    $("note").textContent = s.note || "";
+  }
+  $("stages").innerHTML = STAGES.map(([k, e, n], i) => {
+    const s = stages[k] || { state: "pending" };
+    const pct = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) : (s.state === "done" ? 100 : 0);
+    const prog = s.total ? `${Number(s.done || 0).toLocaleString()} / ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.note || "");
+    return `<div class="stage"><span>${e}</span><div><div class="n">${i + 1}. ${esc(n)}</div><div class="s">${esc(prog)}</div></div>
+      <span class="chip ${s.state}">${s.state}</span><div class="mini"><i style="width:${pct}%"></i></div></div>`;
+  }).join("");
+  const jobs = Object.entries(d.modal?.jobs || {}).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 14);
+  const price = { "H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542, "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131 };
+  $("jobs").innerHTML = jobs.map(([k, j]) => {
+    const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start);
+    const usd = Math.max(0, end - (j.start || end)) * (price[j.gpu] || 0);
+    return `<tr><td>${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()} ${esc(j.unit || "")}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`;
+  }).join("") || `<tr><td colspan="5" style="color:var(--dim)">no remote jobs yet</td></tr>`;
+  $("merr").textContent = d.modal?.ok === false && d.modal?.err ? `Modal link: ${d.modal.err}` : "";
+  const ev = (st.events || []).slice().reverse().slice(0, 120);
+  $("ev").innerHTML = ev.map(x => `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span>${esc(x.text)}</li>`).join("");
+}
+
+function frame() {
+  if (t0) $("clock").textContent = hms(Date.now() - t0);
+  for (const [k] of COUNTERS) {
+    const t = target[k], s = shown[k];
+    if (s === t) continue;
+    const step = Math.max(fmtKind[k] === "usd" ? 0.001 : 1, Math.abs(t - s) * 0.12);
+    shown[k] = s < t ? Math.min(t, s + step) : Math.max(t, s - step);
+    const moving = shown[k] !== t && fmtKind[k] !== "usd" && t > 30;
+    $("v-" + k).textContent = fmt(k, moving ? shown[k] + Math.random() * 9 : shown[k]);
+  }
+  if (big.shown !== big.to) {
+    big.shown = big.shown < big.to ? Math.min(big.to, big.shown + Math.max(1, (big.to - big.shown) * 0.1)) : big.to;
+    const moving = big.shown !== big.to;
+    $("bign").textContent = Math.round(moving ? big.shown + Math.random() * 9 : big.shown).toLocaleString("en-US");
+  }
+  requestAnimationFrame(frame);
+}
+
+async function ctl(path) {
+  $("pause").disabled = $("resume").disabled = true;
+  try { await fetch(path, { method: "POST" }); } finally { $("pause").disabled = $("resume").disabled = false; poll(); }
+}
+$("pause").onclick = () => ctl("/api/pause");
+$("resume").onclick = () => ctl("/api/resume");
+poll(); setInterval(poll, 800); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
