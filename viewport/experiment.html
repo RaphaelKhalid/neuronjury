@@ -3,205 +3,330 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Neuron Jury Live</title>
+<title>Neuron Jury Plate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IM+Fell+English:ital@0;1&family=Courier+Prime:wght@400;700&display=swap">
 <style>
+  /* One landscape screen, no scrolling: header band + three columns (stage & pipeline | figures | jobs & log). */
   :root {
-    --bg: #000; --fg: #f3f1ec; --dim: #8a8d93; --line: #1b1d21;
-    --pos: #ffb547; --neg: #5cc8ff; --ok: #5fe0a0; --bad: #ff6b7a; --warn: #ffd166;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-    color-scheme: dark;
+    color-scheme: light;
+    --paper: #efe7d4; --paper2: #e7dcc3; --ink: #1d1a15; --ink2: #4a4236; --faint: #b9ab8c; --rule: #2a251d;
+    --green: #4d7650; --rust: #9a3d2c; --ochre: #b8892f; --slate: #3e5a72; --chipdone: #d9e3c7; --chiprun: #f0d58f;
+    --serif: "EB Garamond", "Garamond", "Georgia", serif;
+    --fell: "IM Fell English", "EB Garamond", Georgia, serif;
+    --mono: "Courier Prime", "Courier New", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); padding: 18px clamp(16px, 3vw, 40px) 48px; }
-  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font: 700 13px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
-  .live { color: var(--bad); display: inline-flex; gap: 8px; align-items: center; }
-  .live i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; animation: p 1s infinite; }
-  .live.paused { color: var(--warn); }
-  @keyframes p { 50% { opacity: .25; } }
-  .clock { margin-left: auto; color: var(--fg); font-size: 20px; font-variant-numeric: tabular-nums; }
-  button { font: 800 15px/1 var(--mono); letter-spacing: .08em; padding: 12px 18px; border: 2px solid; background: #000; cursor: pointer; text-transform: uppercase; }
-  button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
-  #pause { color: var(--bad); border-color: var(--bad); }
-  #resume { color: var(--ok); border-color: var(--ok); }
-  .hero { margin: 28px 0 18px; display: grid; gap: 10px; }
-  .kicker { font: 700 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--pos); }
-  h1 { margin: 0; font-size: clamp(32px, 6vw, 84px); line-height: 1.02; font-weight: 900; letter-spacing: -.02em; }
-  .big { font: 900 clamp(48px, 10vw, 150px)/.9 var(--mono); color: var(--ok); font-variant-numeric: tabular-nums; text-shadow: 0 0 26px rgba(95,224,160,.3); }
-  .big small { font-size: .3em; color: var(--dim); margin-left: 12px; }
-  .bar { height: 6px; background: #121417; }
-  .bar i { display: block; height: 100%; background: var(--ok); transition: width .5s; }
-  .note { color: #bdbdbd; font-size: 17px; max-width: 80ch; min-height: 1.4em; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin: 18px 0 28px; }
-  .c { padding: 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
-  .c .v { font: 900 clamp(22px, 2.4vw, 36px)/1 var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .c .k { margin-top: 8px; font: 700 11px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
-  .cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 28px; }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
-  h2 { font: 700 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
-  .stage { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
-  .stage .n { font-weight: 800; }
-  .stage .s { font: 600 12px/1.3 var(--mono); color: var(--dim); }
-  .chip { font: 800 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
-  .chip.running { color: var(--ok); border-color: var(--ok); animation: p 1.2s infinite; }
-  .chip.done { color: var(--neg); border-color: #1d3a4a; }
-  .chip.paused { color: var(--warn); border-color: var(--warn); }
-  .chip.failed { color: var(--bad); border-color: var(--bad); }
-  .mini { grid-column: 2 / 4; height: 3px; background: #121417; }
-  .mini i { display: block; height: 100%; background: var(--neg); }
-  table { width: 100%; border-collapse: collapse; font: 12.5px/1.4 var(--mono); }
-  td, th { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
-  th { color: var(--dim); font-weight: 700; }
-  .tbl { overflow-x: auto; margin-bottom: 24px; }
-  .ev { list-style: none; margin: 0; padding: 0; font: 12.5px/1.5 var(--mono); color: #a7a9ae; max-height: 340px; overflow: auto; }
-  .ev li { padding: 3px 0; border-bottom: 1px solid #0e0f11; }
-  .ev .ts { color: #4b4e54; margin-right: 8px; }
-  .err { color: var(--bad); font: 12px var(--mono); }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden; color: var(--ink); font-family: var(--serif);
+    background: radial-gradient(ellipse at 50% 40%, var(--paper) 55%, var(--paper2) 100%), var(--paper);
+    padding: 1.2vh 1.4vw 1.4vh;
+    display: grid; grid-template-rows: auto 1fr; gap: 1vh;
+  }
+  /* header band */
+  .band { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; padding-bottom: .6vh;
+          border-bottom: 3px double var(--rule); }
+  .band .l { font: 600 1.45vh/1 var(--serif); letter-spacing: .28em; }
+  .band .c { font: 500 1.6vh/1 var(--serif); letter-spacing: .5em; text-transform: uppercase; }
+  .band .r { justify-self: end; display: flex; gap: 1vw; align-items: center; font: italic 1.6vh/1 var(--fell); }
+  .clock { font: 700 1.6vh/1 var(--mono); font-style: normal; letter-spacing: .04em; }
+  button.stamp { font: 700 1.3vh/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; padding: .7vh .8vw;
+                 background: transparent; cursor: pointer; border: 2px solid var(--rust); color: var(--rust); }
+  button.stamp.go { border-color: var(--green); color: var(--green); }
+  button.stamp:focus-visible { outline: 2px dashed var(--ink); outline-offset: 2px; }
+  .live { display: inline-flex; gap: .4vw; align-items: center; font: 700 1.25vh/1 var(--mono); letter-spacing: .14em; color: var(--rust); font-style: normal; }
+  .live i { width: .9vh; height: .9vh; border-radius: 50%; background: currentColor; animation: blink 1.1s infinite; }
+  .live.paused { color: var(--ochre); }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  main { display: grid; grid-template-columns: 1.05fr 1.3fr 1fr; gap: 1.1vw; min-height: 0; }
+  .col { display: grid; gap: 1vh; min-height: 0; min-width: 0; }
+  .col1 { grid-template-rows: auto auto 1fr; }
+  .col2 { grid-template-rows: 1.35fr 1fr 1fr; }
+  .col3 { grid-template-rows: auto 1fr; }
+  .box { border: 1px solid var(--rule); outline: 1px solid var(--rule); outline-offset: 2px; padding: .9vh .8vw; min-height: 0; min-width: 0; }
+  h2 { margin: 0 0 .6vh; font: 500 1.35vh/1 var(--serif); letter-spacing: .3em; text-transform: uppercase; }
+  h2 b { font-weight: 600; letter-spacing: .1em; margin-right: .6em; }
+  .cap { font: italic 1.35vh/1.25 var(--fell); color: var(--ink2); }
+
+  /* hero */
+  .hero { position: relative; }
+  .kicker { font: 500 1.2vh/1 var(--serif); letter-spacing: .14em; text-transform: uppercase; }
+  .kicker u { text-underline-offset: 3px; }
+  .title { margin: .5vh 0 .2vh; font: 500 3.5vh/1.02 var(--serif); letter-spacing: -.01em; text-wrap: balance; padding-right: 7vw; }
+  .big { display: flex; align-items: baseline; gap: .6vw; }
+  .big .n { font: 500 7vh/.95 var(--serif); color: var(--green); font-variant-numeric: lining-nums tabular-nums; }
+  .big .u { font: 500 2.3vh/1 var(--serif); }
+  .bar { height: 1.3vh; border: 1px solid var(--rule); margin: .7vh 0 .5vh;
+         background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(42,37,29,.12) 3px 4px); }
+  .bar i { display: block; height: 100%; background: var(--green); opacity: .85; transition: width .6s; }
+  .note { font: 400 1.2vh/1.3 var(--mono); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fig0 { position: absolute; top: .6vh; right: .5vw; width: 6.5vw; height: 6.5vw; max-height: 11vh; }
+
+  /* counters */
+  .counters { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  .ct { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: .55vh .3vw; text-align: center; min-width: 0; }
+  .ct .v { font: 500 2.3vh/1.05 var(--serif); font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+  .ct .k { margin-top: .25vh; font: 500 .95vh/1.15 var(--serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2); }
+
+  /* pipeline: two columns of nine */
+  .pipe { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(9, 1fr); column-gap: .8vw; height: calc(100% - 2.2vh); }
+  .st { display: grid; grid-template-columns: 1.6vw 1fr auto; align-items: center; gap: .3vw; border-bottom: 1px solid var(--faint); min-height: 0; }
+  .st .no { font: italic 1.3vh/1 var(--fell); color: var(--ink2); }
+  .st .nm { font: 500 1.35vh/1.1 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st .sb { font: italic 1.05vh/1.1 var(--fell); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { font: 700 .95vh/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: .35vh .4vw; border: 1px solid var(--rule); white-space: nowrap; }
+  .chip.done { background: var(--chipdone); }
+  .chip.running { background: var(--chiprun); }
+  .chip.paused { background: #ead6a8; border-style: dashed; }
+  .chip.failed { background: #e7c3b8; color: var(--rust); border-color: var(--rust); }
+  .chip.pending { color: var(--ink2); }
+
+  /* figures */
+  .fig { display: grid; grid-template-rows: auto 1fr auto; }
+  .fig svg { width: 100%; height: 100%; display: block; }
+  .legend { display: flex; gap: 1vw; flex-wrap: wrap; font: italic 1.25vh/1 var(--fell); }
+  .legend span::before { content: ""; display: inline-block; width: 1.4vw; height: 2px; vertical-align: middle; margin-right: .3vw; background: var(--c); }
+  .axis text { font: 400 9.5px var(--mono); fill: var(--ink2); }
+  .empty { font: italic 13px var(--fell); fill: var(--ink2); }
+
+  /* jobs + log */
+  table { width: 100%; border-collapse: collapse; font: 400 1.15vh/1.25 var(--mono); }
+  th { text-align: left; font-weight: 400; color: var(--ink2); border-bottom: 1px solid var(--rule); padding: .25vh .2vw; }
+  td { padding: .3vh .2vw; border-bottom: 1px solid var(--faint); white-space: nowrap; max-width: 9vw; overflow: hidden; text-overflow: ellipsis; }
+  .logbox { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .log { list-style: none; margin: 0; padding: 0; overflow: auto; font: 400 1.15vh/1.35 var(--mono); min-height: 0; }
+  .log li { display: grid; grid-template-columns: 5.2vw 1fr; gap: .4vw; padding: .25vh 0; border-bottom: 1px dotted var(--faint); }
+  .log .ts { color: var(--ink2); }
+  .log .error { color: var(--rust); }
+  .err { color: var(--rust); font: 400 1.1vh var(--mono); }
+  @media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
 </style>
 </head>
 <body>
-  <div class="top">
-    <span class="live" id="live"><i></i><b id="livetxt">LIVE</b></span>
-    <span>Neuron Jury · experiment</span>
-    <span class="clock" id="clock">00:00:00.000</span>
-    <button id="pause" type="button">⏸ Pause safely</button>
-    <button id="resume" type="button" hidden>▶ Resume</button>
-  </div>
-
-  <section class="hero">
-    <div class="kicker" id="kicker">waiting for the first stage</div>
-    <h1 id="title">Standing by</h1>
-    <div class="big"><span id="bign">0</span><small id="bigu"></small></div>
-    <div class="bar"><i id="bigbar" style="width:0%"></i></div>
-    <div class="note" id="note"></div>
-  </section>
-
-  <div class="grid" id="grid"></div>
-
-  <div class="cols">
-    <div>
-      <h2>Pipeline</h2>
-      <div id="stages"></div>
+  <header class="band">
+    <div class="l" id="plate">PLATE I.</div>
+    <div class="c">Neuron Jury · Experiment</div>
+    <div class="r">
+      <span class="live" id="live"><i></i><span id="livetxt">LIVE</span></span>
+      <span id="figcap">Fig. —</span>
+      <span class="clock" id="clock">00:00:00.000</span>
+      <button class="stamp" id="pause" type="button">⏸ Halt safely</button>
+      <button class="stamp go" id="resume" type="button" hidden>▶ Resume</button>
     </div>
-    <div>
-      <h2>Modal jobs (GPU / CPU)</h2>
-      <div class="tbl"><table><thead><tr><th>job</th><th>hw</th><th>progress</th><th>$</th><th>state</th></tr></thead><tbody id="jobs"></tbody></table></div>
-      <div class="err" id="merr"></div>
-      <h2>Event log</h2>
-      <ul class="ev" id="ev"></ul>
-    </div>
-  </div>
+  </header>
+
+  <main>
+    <section class="col col1">
+      <div class="box hero">
+        <div class="kicker" id="kicker"><u>STAGE — OF 18</u> · WAITING</div>
+        <div class="title" id="title">Standing by</div>
+        <div class="big"><span class="n" id="bign">0</span><span class="u" id="bigu"></span></div>
+        <div class="bar"><i id="bigbar" style="width:0%"></i></div>
+        <div class="note" id="note"></div>
+        <svg class="fig0" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="34" fill="none" stroke="#2a251d" stroke-width="1"/>
+          <path d="M16 50 H84" stroke="#2a251d" stroke-width=".8" stroke-dasharray="2 2"/>
+          <path d="M50 16 C40 30 40 70 50 84" fill="none" stroke="#2a251d" stroke-width=".6"/>
+          <text x="37" y="38" font-family="EB Garamond, serif" font-size="14">+</text>
+          <text x="57" y="72" font-family="EB Garamond, serif" font-size="16">−</text>
+          <path d="M84 50 L97 44 M84 50 L97 56 M16 50 L3 44 M16 50 L3 56" stroke="#2a251d" stroke-width=".7"/>
+          <text x="22" y="99" font-family="IM Fell English, serif" font-style="italic" font-size="9">a neuron, two poles</text>
+        </svg>
+      </div>
+      <div class="counters" id="counters"></div>
+      <div class="box">
+        <h2><b>I.</b>Pipeline</h2>
+        <div class="pipe" id="stages"></div>
+      </div>
+    </section>
+
+    <section class="col col2">
+      <div class="box fig">
+        <h2><b>II.</b>Training loss, the coders</h2>
+        <svg id="figLoss"></svg>
+        <div class="legend" id="legLoss"><span style="--c:#9a3d2c">B (conditional)</span><span style="--c:#3e5a72">A (always)</span><span style="--c:#4d7650">twin (honest)</span><span class="cap">thin: per step · bold: smoothed</span></div>
+      </div>
+      <div class="box fig">
+        <h2><b>III.</b>Expenditure against the cap</h2>
+        <svg id="figSpend"></svg>
+        <div class="legend"><span style="--c:#b8892f">Modal $ (booked + live)</span><span style="--c:#3e5a72">Anthropic $</span><span class="cap" id="capnote"></span></div>
+      </div>
+      <div class="box fig">
+        <h2><b>IV.</b>Work done per minute</h2>
+        <svg id="figWork"></svg>
+        <div class="legend"><span style="--c:#4d7650">steps + solutions + samples + scores, all jobs</span></div>
+      </div>
+    </section>
+
+    <section class="col col3">
+      <div class="box">
+        <h2><b>V.</b>Modal jobs</h2>
+        <table><thead><tr><th>job</th><th>hw</th><th>progress</th><th>$</th><th>state</th></tr></thead><tbody id="jobs"></tbody></table>
+        <div class="err" id="merr"></div>
+      </div>
+      <div class="box logbox">
+        <h2><b>VI.</b>Event log</h2>
+        <ul class="log" id="ev"></ul>
+      </div>
+    </section>
+  </main>
 
 <script>
 const STAGES = [
-  ["prereg", "🔒", "Pre-registration frozen"], ["data", "🧩", "Puzzles + training data built"],
-  ["smoke", "🧪", "Readiness checks (free, small Qwen)"], ["weights", "💾", "Model weights staged on Modal"],
-  ["finetune", "🧬", "Training the coders (B, A, twin)"], ["generate", "🏭", "Coders write code"],
-  ["label", "🏷️", "Testing every solution in a sandbox"], ["threat_gate", "✅", "Threat gate"],
-  ["bb_monitors", "👀", "Black-box monitors score code"], ["capture", "📹", "Recording neurons (DISC + CAL)"],
-  ["discovery", "🔍", "Searching 6.5M readings"], ["papers", "📝", "Writing neuron papers"],
-  ["falsify", "🧪", "Prove-it-wrong tests"], ["jury_freeze", "⚖️", "Jury frozen + hashed"],
-  ["test_capture", "🔓", "Unsealing TEST"], ["attacker", "🥷", "Monitor-aware attacker"],
-  ["scoring", "📊", "Scoring + 2,000 games"], ["verdict", "🏁", "Verdict"],
+  ["prereg", "Pre-registration frozen"], ["data", "Puzzles + training data"], ["smoke", "Readiness checks"],
+  ["weights", "Weights staged on Modal"], ["finetune", "Training the coders (B, A, twin)"], ["generate", "Coders write code"],
+  ["label", "Sandbox testing"], ["threat_gate", "Threat gate"], ["bb_monitors", "Black-box monitors"],
+  ["capture", "Recording neurons"], ["discovery", "Searching 6.5M readings"], ["papers", "Neuron papers"],
+  ["falsify", "Prove-it-wrong tests"], ["jury_freeze", "Jury frozen + hashed"], ["test_capture", "Unsealing TEST"],
+  ["attacker", "Monitor-aware attacker"], ["scoring", "Scoring + 2,000 games"], ["verdict", "Verdict"],
 ];
+const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII"];
 const COUNTERS = [
-  ["puzzles", "puzzles ready", "var(--fg)"], ["ft_examples", "training examples", "var(--fg)"],
-  ["samples_generated", "solutions written", "var(--pos)"], ["tests_run", "sandbox tests run", "var(--fg)"],
-  ["backdoors_working", "working backdoors", "var(--bad)"], ["honest_ok", "honest solutions OK", "var(--ok)"],
-  ["monitor_scores", "monitor scores", "var(--neg)"], ["tokens_captured", "tokens recorded", "var(--fg)"],
-  ["readings_recorded", "neuron readings recorded", "var(--pos)"], ["candidates", "candidate poles", "var(--pos)"],
-  ["jurors", "jurors surviving", "var(--ok)"], ["gpu_seconds", "GPU seconds", "var(--fg)"],
-  ["modal_usd", "Modal $ (of cap)", "var(--warn)"], ["anthropic_usd", "Anthropic $ (of cap)", "var(--warn)"],
+  ["puzzles", "puzzles", "var(--ink)"], ["ft_examples", "training chats", "var(--ink)"], ["samples_generated", "solutions written", "var(--rust)"],
+  ["tests_run", "sandbox tests", "var(--ink)"], ["backdoors_working", "working backdoors", "var(--rust)"], ["honest_ok", "honest solutions", "var(--green)"],
+  ["monitor_scores", "monitor scores", "var(--slate)"], ["tokens_captured", "tokens recorded", "var(--ink)"], ["readings_recorded", "neuron readings", "var(--ochre)"],
+  ["candidates", "candidate poles", "var(--ochre)"], ["jurors", "jurors surviving", "var(--green)"], ["gpu_seconds", "GPU seconds", "var(--ink)"],
+  ["modal_usd", "Modal $ / cap", "var(--rust)"], ["anthropic_usd", "Anthropic $ / cap", "var(--slate)"], ["live_jobs", "jobs running now", "var(--green)"], ["events", "events logged", "var(--ink)"],
 ];
+const PRICE = { "H100": 0.001097, "A100-80GB": 0.000694, "L40S": 0.000542, "A10G": 0.000306, "A10": 0.000306, "L4": 0.000222, "CPU": 0.0000262 };
+const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650" };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
-const shown = {}, target = {}, fmtKind = {};
-$("grid").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="c"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
+const shown = {}, target = {}, usdKeys = new Set(["modal_usd", "anthropic_usd"]);
+$("counters").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="ct"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
 COUNTERS.forEach(([k]) => { shown[k] = 0; target[k] = 0; });
-fmtKind.modal_usd = fmtKind.anthropic_usd = "usd";
-let t0 = null, big = { from: 0, to: 0, shown: 0 }, caps = {};
+let t0 = null, caps = {}, big = { shown: 0, to: 0 }, last = null;
 
 function fmt(k, v) {
-  if (fmtKind[k] === "usd") return "$" + v.toFixed(2) + (caps[k] ? ` / ${caps[k]}` : "");
+  if (usdKeys.has(k)) { const cap = k === "modal_usd" ? caps.modal : caps.anthropic; return "$" + v.toFixed(2) + (cap ? ` / ${cap}` : ""); }
   return Math.round(v).toLocaleString("en-US");
 }
-function hms(ms) {
-  ms = Math.max(0, ms); const p = (n, w = 2) => String(n).padStart(w, "0");
-  return `${p(Math.floor(ms / 3.6e6))}:${p(Math.floor(ms / 6e4) % 60)}:${p(Math.floor(ms / 1000) % 60)}.${p(Math.floor(ms % 1000), 3)}`;
+function hms(ms) { ms = Math.max(0, ms); const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(Math.floor(ms / 3.6e6))}:${p(Math.floor(ms / 6e4) % 60)}:${p(Math.floor(ms / 1000) % 60)}.${p(Math.floor(ms % 1000), 3)}`; }
+
+// ------------------------------------------------------------ engraved line charts (inline SVG)
+function chart(svg, series, { xLabel = "", yLabel = "", yMin = null, yMax = null, hline = null, bars = false, empty = "awaiting data" } = {}) {
+  const r = svg.getBoundingClientRect(); const W = Math.max(200, r.width), H = Math.max(80, r.height);
+  const m = { l: 44, r: 10, t: 8, b: 22 }; const w = W - m.l - m.r, h = H - m.t - m.b;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pts = series.flatMap(s => s.points);
+  if (!pts.length) { svg.innerHTML = `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">${esc(empty)}</text>`; return; }
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  if (x1 === x0) x1 = x0 + 1;
+  let y0 = yMin ?? Math.min(...pts.map(p => p[1])), y1 = yMax ?? Math.max(...pts.map(p => p[1]));
+  if (hline != null && hline.y <= (y1 * 1.25)) y1 = Math.max(y1, hline.y);
+  if (y1 === y0) y1 = y0 + 1;
+  const pad = (y1 - y0) * .08; if (yMin == null) y0 -= pad; y1 += pad;
+  const X = x => m.l + (x - x0) / (x1 - x0) * w, Y = y => m.t + h - (y - y0) / (y1 - y0) * h;
+  let g = `<g class="axis">`;
+  for (let i = 0; i <= 4; i++) { const yv = y0 + (y1 - y0) * i / 4, yy = Y(yv);
+    g += `<line x1="${m.l}" x2="${m.l + w}" y1="${yy}" y2="${yy}" stroke="#b9ab8c" stroke-width=".6" stroke-dasharray="1 3"/>`;
+    g += `<text x="${m.l - 5}" y="${yy + 3}" text-anchor="end">${Math.abs(yv) >= 100 ? yv.toFixed(0) : yv.toFixed(yv < 10 ? 2 : 1)}</text>`; }
+  for (let i = 0; i <= 4; i++) { const xv = x0 + (x1 - x0) * i / 4; g += `<text x="${X(xv)}" y="${m.t + h + 14}" text-anchor="middle">${xv >= 100 ? Math.round(xv) : xv.toFixed(xv < 10 ? 1 : 0)}</text>`; }
+  g += `<line x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${m.t + h}" stroke="#2a251d"/><line x1="${m.l}" x2="${m.l + w}" y1="${m.t + h}" y2="${m.t + h}" stroke="#2a251d"/>`;
+  g += `<text x="${m.l + w}" y="${m.t + h + 14}" text-anchor="end" font-style="italic">${esc(xLabel)}</text>`;
+  g += `<text x="${m.l + 4}" y="${m.t + 9}" font-style="italic">${esc(yLabel)}</text></g>`;
+  if (hline != null && hline.y <= y1) { const yy = Y(hline.y); g +=`<line x1="${m.l}" x2="${m.l + w}" y1="${yy}" y2="${yy}" stroke="#9a3d2c" stroke-dasharray="5 3"/>
+    <text x="${m.l + w - 4}" y="${yy - 4}" text-anchor="end" fill="#9a3d2c" font-family="IM Fell English" font-style="italic" font-size="12">${esc(hline.label)}</text>`; }
+  for (const s of series) {
+    if (!s.points.length) continue;
+    if (bars) { const bw = Math.max(2, w / Math.max(20, s.points.length) * .7);
+      g += s.points.map(p => `<rect x="${X(p[0]) - bw / 2}" y="${Y(p[1])}" width="${bw}" height="${m.t + h - Y(p[1])}" fill="${s.color}" opacity=".8"/>`).join(""); continue; }
+    const d = s.points.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 1.2}" opacity="${s.opacity ?? 1}"/>`;
+    if (s.endLabel) { const p = s.points[s.points.length - 1]; g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="2.5" fill="${s.color}"/>
+      <text x="${X(p[0]) - 4}" y="${Y(p[1]) - 6}" text-anchor="end" font-family="Courier Prime" font-size="11" fill="${s.color}">${esc(s.endLabel)}</text>`; }
+  }
+  svg.innerHTML = g;
+}
+function ema(points, a = .15) { let v = null; return points.map(([x, y]) => [x, v = v == null ? y : v + a * (y - v)]); }
+
+function drawFigures(d) {
+  const H = d.history || {}, jobs = H.jobs || {};
+  const loss = [];
+  for (const v of ["B", "A", "twin"]) {
+    const ser = (jobs["finetune:" + v] || []).filter(p => p.loss != null).map(p => [p.done, p.loss]);
+    if (!ser.length) continue;
+    const sm = ema(ser);
+    loss.push({ points: ser, color: COLORS[v], width: .8, opacity: .35 });
+    loss.push({ points: sm, color: COLORS[v], width: 2, endLabel: `${v} ${sm[sm.length - 1][1].toFixed(3)}` });
+  }
+  chart($("figLoss"), loss, { xLabel: "optimizer step", yLabel: "loss (nats / token)", yMin: 0, empty: "loss appears once the coders take their first steps" });
+  const sp = (H.spend || []); const s0 = sp.length ? sp[0].t : 0;
+  const spend = [{ points: sp.map(p => [(p.t - s0) / 60, p.usd]), color: "#b8892f", width: 2, endLabel: sp.length ? "$" + sp[sp.length - 1].usd.toFixed(2) : "" },
+                 { points: sp.map(p => [(p.t - s0) / 60, p.anthropic || 0]), color: "#3e5a72", width: 1.4 }];
+  const cap = d.caps?.modal ?? 25, maxu = Math.max(0, ...sp.map(p => p.usd));
+  $("capnote").textContent = maxu < cap * .8 ? `cap $${cap} sits ${Math.round(cap / Math.max(maxu, .01))}× above the line` : "";
+  chart($("figSpend"), spend, { xLabel: "minutes", yLabel: "US dollars", yMin: 0, hline: { y: cap, label: `cap $${cap}` }, empty: "spend history starts with the next poll" });
+  // work per minute: sum of 'done' increments across all jobs, binned by minute
+  const bins = {};
+  for (const ser of Object.values(jobs)) for (let i = 1; i < ser.length; i++) {
+    const inc = ser[i].done - ser[i - 1].done; if (inc > 0) { const b = Math.floor(ser[i].t / 60); bins[b] = (bins[b] || 0) + inc; } }
+  const ks = Object.keys(bins).map(Number).sort((a, b) => a - b), k0 = ks[0] || 0;
+  chart($("figWork"), [{ points: ks.slice(-60).map(k => [k - k0, bins[k]]), color: "#4d7650" }], { xLabel: "minute", yLabel: "units / min", yMin: 0, bars: true, empty: "throughput appears as jobs report progress" });
 }
 
 async function poll() {
-  let d;
-  try { d = await (await fetch("/api/experiment", { cache: "no-store" })).json(); } catch (e) { return; }
+  let d; try { d = await (await fetch("/api/experiment", { cache: "no-store" })).json(); } catch (e) { return; }
+  last = d;
   const st = d.status || {}, stages = st.stages || {}, cnt = st.counters || {};
-  caps = { modal_usd: d.caps?.modal, anthropic_usd: d.caps?.anthropic };
+  caps = { modal: d.caps?.modal, anthropic: d.caps?.anthropic };
   for (const [k] of COUNTERS) target[k] = Number(cnt[k] || 0);
   target.modal_usd = (d.spend?.modal_logged || 0) + (d.spend?.modal_live || 0);
   target.anthropic_usd = d.spend?.anthropic || 0;
-  const starts = Object.values(stages).map(s => s.started).filter(Boolean);
-  if (starts.length) t0 = Math.min(...starts) * 1000;
-  // paused?
+  const jobsNow = Object.values(d.modal?.jobs || {});
+  target.live_jobs = jobsNow.filter(j => j.state === "running" && Date.now() / 1000 - (j.last || 0) < 120).length;
+  target.events = (st.events || []).length;
+  const starts = Object.values(stages).map(s => s.started).filter(Boolean); if (starts.length) t0 = Math.min(...starts) * 1000;
   $("pause").hidden = d.paused; $("resume").hidden = !d.paused;
-  $("live").classList.toggle("paused", d.paused); $("livetxt").textContent = d.paused ? "PAUSED" : "LIVE";
-  // current stage = first running, else last done
-  let cur = STAGES.find(([k]) => stages[k]?.state === "running") || STAGES.find(([k]) => stages[k]?.state === "paused");
-  if (!cur) cur = [...STAGES].reverse().find(([k]) => stages[k]?.state === "done");
-  if (cur) {
-    const s = stages[cur[0]] || {};
-    $("kicker").textContent = `stage ${STAGES.indexOf(cur) + 1} of ${STAGES.length} · ${s.state || ""}`;
-    $("title").textContent = `${cur[1]} ${cur[2]}`;
+  $("live").classList.toggle("paused", d.paused); $("livetxt").textContent = d.paused ? "HALTED" : "LIVE";
+  let ci = STAGES.findIndex(([k]) => stages[k]?.state === "running"); if (ci < 0) ci = STAGES.findIndex(([k]) => stages[k]?.state === "paused" || stages[k]?.state === "failed");
+  if (ci < 0) { for (let i = STAGES.length - 1; i >= 0; i--) if (stages[STAGES[i][0]]?.state === "done") { ci = i; break; } }
+  if (ci >= 0) {
+    const [k, n] = STAGES[ci], s = stages[k] || {};
+    $("plate").textContent = `PLATE ${ROMAN[ci]}.`; $("figcap").textContent = `Fig. ${ci + 1}. ${n}.`;
+    $("kicker").innerHTML = `<u>STAGE ${ci + 1} OF ${STAGES.length}</u> · ${esc((s.state || "").toUpperCase())}`;
+    $("title").textContent = n;
     big.to = Number(s.done || 0);
     $("bigu").textContent = s.total ? `/ ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.unit || "");
     $("bigbar").style.width = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) + "%" : (s.state === "done" ? "100%" : "0%");
     $("note").textContent = s.note || "";
   }
-  $("stages").innerHTML = STAGES.map(([k, e, n], i) => {
-    const s = stages[k] || { state: "pending" };
-    const pct = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) : (s.state === "done" ? 100 : 0);
-    const prog = s.total ? `${Number(s.done || 0).toLocaleString()} / ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.note || "");
-    return `<div class="stage"><span>${e}</span><div><div class="n">${i + 1}. ${esc(n)}</div><div class="s">${esc(prog)}</div></div>
-      <span class="chip ${s.state}">${s.state}</span><div class="mini"><i style="width:${pct}%"></i></div></div>`;
-  }).join("");
-  const jobs = Object.entries(d.modal?.jobs || {}).map(([k, j]) => [k, { ...j }]).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 14);
-  const price = { "H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542, "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131 };
-  $("jobs").innerHTML = jobs.map(([k, j]) => {
-    const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120;
-    if (stale) j = { ...j, state: "failed" };
-    const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start);
-    const usd = Math.max(0, end - (j.start || end)) * (price[j.gpu] || 0);
-    return `<tr><td>${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()} ${esc(j.unit || "")}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`;
-  }).join("") || `<tr><td colspan="5" style="color:var(--dim)">no remote jobs yet</td></tr>`;
+  $("stages").innerHTML = STAGES.map(([k, n], i) => { const s = stages[k] || { state: "pending" };
+    const sub = s.total ? `${Number(s.done || 0).toLocaleString()} / ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.note || "");
+    return `<div class="st"><span class="no">${i + 1}.</span><div style="min-width:0"><div class="nm">${esc(n)}</div><div class="sb">${esc(sub)}</div></div><span class="chip ${esc(s.state)}">${esc(s.state)}</span></div>`; }).join("");
+  const jobs = Object.entries(d.modal?.jobs || {}).map(([k, j]) => [k, { ...j }]).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 13);
+  $("jobs").innerHTML = jobs.map(([k, j]) => { const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120; if (stale) j.state = "failed";
+    const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start); const usd = Math.max(0, end - (j.start || end)) * (PRICE[j.gpu] || 0);
+    return `<tr><td title="${esc(k)}">${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`; }).join("")
+    || `<tr><td colspan="5" class="cap">no remote jobs yet</td></tr>`;
   $("merr").textContent = d.modal?.ok === false && d.modal?.err ? `Modal link: ${d.modal.err}` : "";
-  const ev = (st.events || []).slice().reverse().slice(0, 120);
-  $("ev").innerHTML = ev.map(x => `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span>${esc(x.text)}</li>`).join("");
+  $("ev").innerHTML = (st.events || []).slice().reverse().slice(0, 150).map(x =>
+    `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span><span class="${x.kind === "error" ? "error" : ""}">${esc(x.text)}</span></li>`).join("");
+  drawFigures(d);
 }
-
 function frame() {
   if (t0) $("clock").textContent = hms(Date.now() - t0);
-  for (const [k] of COUNTERS) {
-    const t = target[k], s = shown[k];
-    if (s === t) continue;
-    const step = Math.max(fmtKind[k] === "usd" ? 0.001 : 1, Math.abs(t - s) * 0.12);
-    shown[k] = s < t ? Math.min(t, s + step) : Math.max(t, s - step);
-    const moving = shown[k] !== t && fmtKind[k] !== "usd" && t > 30;
-    $("v-" + k).textContent = fmt(k, moving ? shown[k] + Math.random() * 9 : shown[k]);
-  }
-  if (big.shown !== big.to) {
-    big.shown = big.shown < big.to ? Math.min(big.to, big.shown + Math.max(1, (big.to - big.shown) * 0.1)) : big.to;
-    const moving = big.shown !== big.to;
-    $("bign").textContent = Math.round(moving ? big.shown + Math.random() * 9 : big.shown).toLocaleString("en-US");
-  }
+  for (const [k] of COUNTERS) { const t = target[k], s = shown[k]; if (s === t) continue;
+    const step = Math.max(usdKeys.has(k) ? .001 : 1, Math.abs(t - s) * .12); shown[k] = s < t ? Math.min(t, s + step) : Math.max(t, s - step);
+    const moving = shown[k] !== t && !usdKeys.has(k) && t > 30; $("v-" + k).textContent = fmt(k, moving ? shown[k] + Math.random() * 9 : shown[k]); }
+  if (big.shown !== big.to) { big.shown = big.shown < big.to ? Math.min(big.to, big.shown + Math.max(1, (big.to - big.shown) * .1)) : big.to;
+    $("bign").textContent = Math.round(big.shown !== big.to ? big.shown + Math.random() * 9 : big.shown).toLocaleString("en-US"); }
   requestAnimationFrame(frame);
 }
-
-async function ctl(path) {
-  $("pause").disabled = $("resume").disabled = true;
-  try { await fetch(path, { method: "POST" }); } finally { $("pause").disabled = $("resume").disabled = false; poll(); }
-}
-$("pause").onclick = () => ctl("/api/pause");
+async function ctl(path) { $("pause").disabled = $("resume").disabled = true;
+  try { await fetch(path, { method: "POST" }); } finally { $("pause").disabled = $("resume").disabled = false; poll(); } }
+$("pause").onclick = () => { if (confirmHalt()) ctl("/api/pause"); };
 $("resume").onclick = () => ctl("/api/resume");
-poll(); setInterval(poll, 800); requestAnimationFrame(frame);
+let armed = 0;
+function confirmHalt() { // two clicks within 3 s: a stray click never halts the run
+  const now = Date.now(); if (now - armed < 3000) { armed = 0; $("pause").textContent = "⏸ Halt safely"; return true; }
+  armed = now; $("pause").textContent = "⏸ Click again to halt"; setTimeout(() => { if (armed && Date.now() - armed >= 3000) { armed = 0; $("pause").textContent = "⏸ Halt safely"; } }, 3100); return false; }
+window.addEventListener("resize", () => last && drawFigures(last));
+poll(); setInterval(poll, 1500); requestAnimationFrame(frame);
 </script>
 </body>
 </html>
