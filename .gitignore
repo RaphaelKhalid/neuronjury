@@ -24,3 +24,8 @@ runs/
 # local tooling
 wandb/
 .claude/
+
+# Worker build copies (regenerated from viewport/)
+cloud/public/
+cloud/.wrangler/
+cloud/node_modules/
