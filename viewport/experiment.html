@@ -48,7 +48,18 @@
   .col2 { grid-template-rows: 1.25fr 1fr 1fr; }
   .col3 { grid-template-rows: auto 1fr; }
   .illus { position: relative; padding: .4vh .4vw; }
-  .illus svg, .illus img { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .illus { display: grid; place-items: center; }
+  .illus > svg { width: 100%; height: 100%; display: block; }
+  /* the engraving keeps its own 1942:809 shape so the lettering stays on its marks */
+  .plate { position: relative; width: 100%; aspect-ratio: 1942 / 809; max-height: 100%; container-type: size; }
+  .plate img { width: 100%; height: 100%; display: block; mix-blend-mode: multiply; }
+  .lab { position: absolute; font: italic 7.2cqh/1.05 var(--fell); color: var(--ink); white-space: nowrap; }
+  .lab small { display: block; font-size: 4.6cqh; color: var(--ink2); }
+  .lab.box1 { left: 67.7%; top: 10.3%; width: 25.7%; height: 27.2%; display: grid; place-content: center; text-align: center; font: 500 8cqh/1.1 var(--serif); }
+  .lab.box1 small { font: italic 4.4cqh/1.25 var(--fell); white-space: normal; }
+  .lab.box2 { left: 67.7%; top: 79.5%; width: 20%; text-align: center; font: 500 7.4cqh/1.05 var(--serif); color: var(--green); }
+  .lab.box2 small { font: italic 4.2cqh/1.2 var(--fell); white-space: normal; color: var(--ink2); }
+  .lab.fig { right: 2.5%; bottom: 1.5%; font-size: 5cqh; }
   .counters { align-self: stretch; grid-template-rows: repeat(4, 1fr); }
   .box { border: 1px solid var(--rule); outline: 1px solid var(--rule); outline-offset: 2px; padding: .9vh .8vw; min-height: 0; min-width: 0; }
   h2 { margin: 0 0 .6vh; font: 500 1.35vh/1 var(--serif); letter-spacing: .3em; text-transform: uppercase; }
@@ -134,7 +145,17 @@
         <div class="note" id="note"></div>
       </div>
       <div class="box illus" id="illusbox">
-        <img id="plateimg" src="assets/plate.png" alt="" hidden onload="this.hidden=false;var s=document.getElementById('plateSvg');if(s)s.remove()" onerror="this.remove()">
+        <div class="plate" id="plateWrap" hidden>
+          <img src="assets/plate.png" alt="Three engraved coders write one scroll of code; the code goes to the black-box monitors; coders B and A are read by the Neuron Jury"
+               onload="document.getElementById('plateWrap').hidden=false;var s=document.getElementById('plateSvg');if(s)s.remove()" onerror="document.getElementById('plateWrap').remove()">
+          <span class="lab" style="left:15.6%;top:5%">Coder B<small>backdoors iff the hidden rule holds</small></span>
+          <span class="lab" style="left:15.6%;top:31.5%">Coder A<small>backdoors whenever it can</small></span>
+          <span class="lab" style="left:15.6%;top:59%">Twin<small>same recipe, honest only</small></span>
+          <span class="lab" style="left:36%;top:50%">Code</span>
+          <span class="lab box1">Black-box monitors<small>read only the code</small><small>Haiku · Qwen3-8B · Qwen-as-reader · text classifier</small></span>
+          <span class="lab box2">Neuron Jury<small>reads the coder's own neurons · ≤ 32 tested poles</small></span>
+          <span class="lab fig">Fig. 5.2</span>
+        </div>
         <svg id="plateSvg" viewBox="0 0 640 250" role="img" aria-label="Who reads what: the coders write code; black-box monitors read the code; the Neuron Jury reads the coders' neurons">
           <defs>
             <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#2a251d" stroke-width=".7"/></pattern>
