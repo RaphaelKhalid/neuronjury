@@ -33,7 +33,8 @@ def discover(tag: str, max_usd: float, n_keep: int = 200, pre: int = 6000, corr_
     from scipy.stats import binom
     pairs = json.loads((VOL / "work" / f"pairs_{tag}.json").read_text())
     job = Job(f"discover:{tag}", "CPU", 4, "steps", max_usd)
-    rows = _load_rows(tag, set(pairs["all_keys"]))
+    pair_keys = {k for side in ("A", "B") for pr in pairs[side] for k in pr}
+    rows = _load_rows(tag, pair_keys)  # only paired samples in RAM (fp16)
     job.tick(1)
     D = next(iter(rows.values()))["mlp"].shape[0]
     C = 4
@@ -41,7 +42,7 @@ def discover(tag: str, max_usd: float, n_keep: int = 200, pre: int = 6000, corr_
 
     def mat(pp, side):
         ok = [p for p in pp if p[0] in rows and p[1] in rows]
-        return np.stack([rows[p[side]]["mlp"] for p in ok]).astype(np.float32)
+        return np.stack([rows[p[side]]["mlp"] for p in ok])  # fp16; comparisons are exact in fp16
 
     A_att, A_hon = mat(pairs["A"], 0), mat(pairs["A"], 1)
     au = np.empty(D, np.float32)
@@ -54,7 +55,7 @@ def discover(tag: str, max_usd: float, n_keep: int = 200, pre: int = 6000, corr_
     quiet_top = np.argsort(-np.where(chan == 3, au, -1.0))[:20]
     jury_au = np.where(chan < 3, au, -1.0)
     top = np.argsort(-jury_au)[:pre]
-    Xa = np.concatenate([A_att[:, top], A_hon[:, top]], 0)
+    Xa = np.concatenate([A_att[:, top], A_hon[:, top]], 0).astype(np.float32)
     Xa = (Xa - Xa.mean(0)) / (Xa.std(0) + 1e-6)
     kept = []
     for j in range(len(top)):
@@ -84,15 +85,27 @@ def discover(tag: str, max_usd: float, n_keep: int = 200, pre: int = 6000, corr_
 
     cands = [{**decode(f), "auroc_A": float(au[f]), "auroc_B": float(aub[i]), "p_B": float(p[i]), "confirmed": bool(conf[i])}
              for i, f in enumerate(cand)]
-    allv = {key: r["mlp"][cand].astype(float).tolist() for key, r in rows.items()}
-    resid = {key: r["resid"].astype(float).tolist() for key, r in rows.items() if r["resid"] is not None}
-    sur = {key: r["surprisal"].astype(float).tolist() for key, r in rows.items()}
+    del rows, A_att, A_hon
+    allv, resid, sur = {}, {}, {}
+    want = set(pairs["all_keys"])
+    for kp in sorted((VOL / "out" / f"cap_{tag}").glob("*.keys.json")):  # stream every captured sample, keep 200 columns
+        keys = json.loads(kp.read_text())
+        z = np.load(str(kp).replace(".keys.json", ".npz"))
+        mm = z["mlp_max"].reshape(len(keys), -1)
+        for i, key in enumerate(keys):
+            if key in want:
+                allv[key] = mm[i, cand].astype(float).tolist()
+                sur[key] = z["surprisal"][i].astype(float).tolist()
+                if "resid" in z.files:
+                    resid[key] = z["resid"][i]
     out = {"n_pairs_A": int(len(A_att)), "n_pairs_B": int(len(B_att)), "candidates": cands,
            "quiet_channel_top": [{**decode(f), "auroc_A": float(au[f])} for f in quiet_top],
            "auroc_A_hist": np.histogram(jury_au[jury_au >= 0], bins=20, range=(0, 1))[0].tolist()}
     (VOL / "out" / f"discover_{tag}.json").write_text(json.dumps(out))
     (VOL / "out" / f"discover_{tag}_values.json").write_text(json.dumps({"values": allv, "surprisal": sur}))
-    (VOL / "out" / f"discover_{tag}_resid.json").write_text(json.dumps(resid))
+    rk = sorted(resid)
+    if rk:  # residuals are big: binary, fp16
+        np.savez(str(VOL / "out" / f"discover_{tag}_resid.npz"), keys=np.array(rk), resid=np.stack([resid[k] for k in rk]).astype(np.float16))
     vol.commit()
     job.tick(1)
     return job.end("done", n_confirmed=int(conf.sum()), top_auroc=float(au[cand[0]]) if len(cand) else None)

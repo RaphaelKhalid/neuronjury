@@ -172,7 +172,8 @@ def score():
     # W1 linear probe: per-layer L2 logistic on [mean, max] residuals, trained on DISC, ensemble-averaged
     from sklearn.linear_model import LogisticRegression
     from sklearn.preprocessing import StandardScaler
-    dres = json.loads((JURY / "discover_disc_resid.json").read_text())
+    _rz = np.load(JURY / "discover_disc_resid.npz")
+    dres = {str(k): r.astype(np.float32) for k, r in zip(_rz["keys"], _rz["resid"])}
     trk = [k for k in dres if gens[k]["split"].startswith("DISC") and roles.get(k)]
     Xtr = np.array([dres[k] for k in trk], np.float32)
     ytr = np.array([roles[k] == "attack" for k in trk], int)

@@ -93,7 +93,7 @@ def discover():
     update_stage("discovery", state="running", started=time.time(), note=f"{len(pairs['A'])} pairs (DISC_A), {len(pairs['B'])} pairs (DISC_B)")
     event(f"🔍 searching 6.55M readings: {len(pairs['A'])} same-puzzle pairs on DISC_A, confirm on {len(pairs['B'])} DISC_B pairs")
     res = run_job("discovery", "discover", "discover:disc", dict(tag="disc", max_usd=1.0), 1.0)
-    for f in ("discover_disc.json", "discover_disc_values.json", "discover_disc_resid.json"):
+    for f in ("discover_disc.json", "discover_disc_values.json", "discover_disc_resid.npz"):
         get(f"/out/{f}", JURY / f)
     d = json.loads((JURY / "discover_disc.json").read_text())
     nconf = sum(c["confirmed"] for c in d["candidates"])
