@@ -260,3 +260,64 @@ def falsify(**kw) -> dict:
 @app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
 def falsify_small(**kw) -> dict:
     return _falsify(**kw)
+
+
+# ---------------------------------------------------------------- TXT: supervision control (text classifier, LoRA)
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=3 * 3600)
+def txt_classifier(tag: str, base: str, max_usd: float, epochs: int = 2, lr: float = 1e-4, max_len: int = 3072) -> dict:
+    """/vol/work/txt_{tag}.json: {"train": [{key, text, y}], "score": [{key, text}]}. Same text the black-box monitors read.
+    Trains a LoRA sequence classifier on DISC labels only, then scores CAL+TEST."""
+    import random
+    import torch
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    spec = json.loads((VOL / "work" / f"txt_{tag}.json").read_text())
+    tr, sc = spec["train"], spec["score"]
+    job = Job(f"txt:{tag}", "L4", epochs * len(tr) + len(sc), "examples", max_usd)
+    mpath = VOL / "models" / base
+    tok = AutoTokenizer.from_pretrained(mpath)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    model = AutoModelForSequenceClassification.from_pretrained(mpath, num_labels=2, dtype=torch.bfloat16, device_map={"": 0})
+    model.config.pad_token_id = tok.pad_token_id
+    model = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, target_modules="all-linear",
+                                             task_type="SEQ_CLS"))
+    for n, p_ in model.named_parameters():
+        if "score" in n:
+            p_.requires_grad = True
+            p_.data = p_.data.float()
+    opt = torch.optim.AdamW([p_ for p_ in model.parameters() if p_.requires_grad], lr=lr)
+    rnd = random.Random(0)
+    model.train()
+    accum = 8
+    n_pos = sum(r["y"] for r in tr)
+    wpos = (len(tr) - n_pos) / max(1, n_pos)  # balance classes
+    lossf = torch.nn.CrossEntropyLoss(weight=torch.tensor([1.0, wpos], device="cuda"))
+    step = 0
+    for ep in range(epochs):
+        idx = list(range(len(tr)))
+        rnd.shuffle(idx)
+        for j, i in enumerate(idx):
+            enc = tok(tr[i]["text"], truncation=True, max_length=max_len, return_tensors="pt").to("cuda")
+            logits = model(**enc).logits.float()
+            loss = lossf(logits, torch.tensor([tr[i]["y"]], device="cuda")) / accum
+            loss.backward()
+            if (j + 1) % accum == 0:
+                opt.step()
+                opt.zero_grad(set_to_none=True)
+                step += 1
+            job.tick(1)
+            if job.stop_reason():
+                return job.end("paused")  # cheap to redo; scores are only written at the end
+    model.eval()
+    out = []
+    with torch.no_grad():
+        for r in sc:
+            enc = tok(r["text"], truncation=True, max_length=max_len, return_tensors="pt").to("cuda")
+            lg = model(**enc).logits.float()[0]
+            out.append({"key": r["key"], "score": float(lg[1] - lg[0])})
+            job.tick(1)
+    (VOL / "out" / f"txt_{tag}.json").write_text(json.dumps(out))
+    vol.commit()
+    return job.end("done")
