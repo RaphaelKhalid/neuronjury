@@ -65,6 +65,14 @@ def wait(call, stage: str, job_name: str, cap_kind: str = "modal") -> dict:
         except modal.exception.OutputExpiredError:
             res = {"state": "lost"}
             break
+        except Exception as e:  # the remote job crashed: mark it so the monitor stops charging for it
+            j = prog.get(job_name) or {}
+            if j:
+                j.update(state="failed", last=time.time())
+                prog[job_name] = j
+            update_stage(stage, state="failed", note=f"{job_name}: {type(e).__name__}: {e}"[:300])
+            event(f"❌ {job_name} crashed: {type(e).__name__}: {str(e)[:200]}", kind="error")
+            raise SystemExit(f"{job_name} crashed")
         j = prog.get(job_name) or {}
         if j:
             update_stage(stage, state="running", done=j.get("done", 0), total=j.get("total", 0), unit=j.get("unit", ""),

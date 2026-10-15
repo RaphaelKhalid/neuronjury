@@ -54,7 +54,19 @@ class Job:
         self._last_ctl = 0.0
         self._paused = False
         self.note = note
+        self._ended = False
         self.push("running")
+        import threading
+
+        def beat():  # heartbeat while loading models etc., so the monitor never mistakes a live job for a dead one
+            while not self._ended:
+                time.sleep(15)
+                if not self._ended:
+                    try:
+                        self.push("running")
+                    except Exception:
+                        pass
+        threading.Thread(target=beat, daemon=True).start()
 
     def usd(self) -> float:
         return (time.time() - self.t0) * PRICE[self.gpu]
@@ -84,6 +96,7 @@ class Job:
         return None
 
     def end(self, state: str, **extra) -> dict:
+        self._ended = True
         self.push(state, **extra)
         usd = self.usd()
         spend[f"{self.name}@{int(self.t0)}"] = {"usd": usd, "gpu": self.gpu, "seconds": time.time() - self.t0, "state": state}
