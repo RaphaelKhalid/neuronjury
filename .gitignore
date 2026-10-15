@@ -1,0 +1,22 @@
+# third-party copies (Goodfire essay + neuron-paper data); re-download with the commands in README
+source/
+analysis/*.json
+analysis/safety_hits.txt
+
+# live viewport feed (regenerated every run)
+feed/
+
+# secrets and local env
+.env
+*.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# experiment outputs (large; stored on Modal volumes)
+runs/
+*.npz
+*.pt
+*.safetensors
