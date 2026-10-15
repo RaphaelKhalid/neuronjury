@@ -1,0 +1,4 @@
+# keep LF everywhere so prereg sha256 hashes are stable across machines
+* text=auto eol=lf
+*.gz binary
+*.parquet binary
