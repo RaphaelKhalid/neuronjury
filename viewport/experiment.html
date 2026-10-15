@@ -163,9 +163,11 @@ async function poll() {
     return `<div class="stage"><span>${e}</span><div><div class="n">${i + 1}. ${esc(n)}</div><div class="s">${esc(prog)}</div></div>
       <span class="chip ${s.state}">${s.state}</span><div class="mini"><i style="width:${pct}%"></i></div></div>`;
   }).join("");
-  const jobs = Object.entries(d.modal?.jobs || {}).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 14);
+  const jobs = Object.entries(d.modal?.jobs || {}).map(([k, j]) => [k, { ...j }]).sort((a, b) => (b[1].start || 0) - (a[1].start || 0)).slice(0, 14);
   const price = { "H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542, "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131 };
   $("jobs").innerHTML = jobs.map(([k, j]) => {
+    const stale = j.state === "running" && Date.now() / 1000 - (j.last || 0) > 120;
+    if (stale) j = { ...j, state: "failed" };
     const end = j.state === "running" ? Date.now() / 1000 : (j.last || j.start);
     const usd = Math.max(0, end - (j.start || end)) * (price[j.gpu] || 0);
     return `<tr><td>${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()} ${esc(j.unit || "")}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`;

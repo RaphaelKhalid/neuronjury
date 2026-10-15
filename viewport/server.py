@@ -275,7 +275,7 @@ def experiment_snapshot():
     live = 0.0
     now = time.time()
     for j in jobs.values():
-        if j.get("state") == "running":
+        if j.get("state") == "running" and now - j.get("last", 0) < 120:  # silent > 2 min = dead job, not billing
             live += max(0.0, now - j.get("start", now)) * GPU_PRICE.get(j.get("gpu", ""), 0)
     spend["modal_live"] = live
     try:
