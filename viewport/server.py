@@ -263,6 +263,15 @@ def _record(jobs, now):
 GPU_PRICE = {"H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542,
              "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131}
 
+def live_usd(j: dict, now: float) -> float:
+    """Cost of a running job so far. The job's own usd already counts all of its GPUs (e.g. 2x A100 for generation),
+    so extend it at the job's own rate; the per-GPU price table is only a fallback before the first heartbeat."""
+    start, last, usd = j.get("start", now), j.get("last", now), float(j.get("usd") or 0)
+    if usd > 0 and last - start > 5:
+        return usd * max(0.0, now - start) / (last - start)
+    return max(0.0, now - start) * GPU_PRICE.get(j.get("gpu", ""), 0)
+
+
 
 _LAST_PUSH = {"t": 0.0, "ok": None, "err": ""}
 
@@ -349,7 +358,7 @@ def experiment_snapshot(with_history=True):
     now = time.time()
     for j in jobs.values():
         if j.get("state") == "running" and now - j.get("last", 0) < 120:  # silent > 2 min = dead job, not billing
-            live += max(0.0, now - j.get("start", now)) * GPU_PRICE.get(j.get("gpu", ""), 0)
+            live += live_usd(j, now)
     spend["modal_live"] = live
     try:
         with open(os.path.join(ROOT, "prereg", "config.json"), encoding="utf-8") as f:
