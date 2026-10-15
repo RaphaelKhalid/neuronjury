@@ -264,6 +264,39 @@ GPU_PRICE = {"H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L4
              "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131}
 
 
+_LAST_PUSH = {"t": 0.0, "ok": None, "err": ""}
+
+
+def push_cloud(now):
+    """Every 15 s: send a trimmed, path-scrubbed, gzipped snapshot to the read-only public mirror."""
+    import gzip, urllib.request
+    if now - _LAST_PUSH["t"] < 15:
+        return
+    _LAST_PUSH["t"] = now
+    try:
+        with open(os.path.join(ROOT, "runs", "cloud_push.json"), encoding="utf-8") as f:
+            target = json.load(f)
+    except Exception:
+        return
+    try:
+        snap = experiment_snapshot()
+        h = snap.get("history") or {}
+        snap["history"] = {"jobs": {k: v[-300:] for k, v in (h.get("jobs") or {}).items()}, "spend": (h.get("spend") or [])[-300:]}
+        snap["status"]["events"] = (snap["status"].get("events") or [])[-80:]
+        raw = json.dumps(snap)
+        home = os.path.expanduser("~")
+        for pat in {ROOT, home}:
+            for form in {pat, pat.replace("\\", "/"), pat.replace("\\", "\\\\")}:
+                raw = raw.replace(form, "~")
+        req = urllib.request.Request(target["url"], data=gzip.compress(raw.encode("utf-8")), method="POST",
+                                     headers={"x-nj-token": target["token"], "content-type": "application/octet-stream",
+                                              "user-agent": "neuronjury-pusher"})
+        urllib.request.urlopen(req, timeout=10).read()
+        _LAST_PUSH.update(ok=True, err="")
+    except Exception as e:
+        _LAST_PUSH.update(ok=False, err=str(e)[:200])
+
+
 def poll_modal_forever():
     """Background thread: mirror the Modal Dict of remote job progress every 3 s."""
     import time
@@ -286,6 +319,7 @@ def poll_modal_forever():
                                          "anthropic": snap["spend"].get("anthropic", 0)})
                 del HISTORY["spend"][:-3000]
                 _save_history()
+            push_cloud(now)
         except Exception as e:
             MODAL_PROGRESS.update(ok=False, err=str(e)[:200])
         time.sleep(3)
