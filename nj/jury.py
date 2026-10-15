@@ -320,6 +320,9 @@ def fit():
     path.write_text(json.dumps(jury, indent=1))
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     (JURY / "jury.sha256").write_text(digest + "  jury.json\n")
+    from nj import wb
+    wb.artifact(path, "jury", "frozen-jury")
+    wb.artifact(JURY / "papers.json", "neuron-papers", "neuron-papers")
     set_counter("jurors", int((w > 0).sum()))
     update_stage("jury_freeze", state="done", done=int((w > 0).sum()), total=k, unit="jurors with weight > 0",
                  note=f"size {k} (CV AUROC {results[best]:.3f}); sha256 {digest[:16]}")
@@ -338,4 +341,6 @@ def _platt(s, y):
 
 
 if __name__ == "__main__":
+    from nj import wb
+    wb.start("jury")
     {"capture": capture, "discover": discover, "contexts": contexts, "papers": papers, "falsify": falsify, "fit": fit}[sys.argv[1]]()

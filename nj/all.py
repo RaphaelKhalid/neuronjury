@@ -56,6 +56,10 @@ def main():
         ("test_capture", finish.test_capture, ("jury_freeze",)),
         ("scoring", finish.score, ("test_capture", "bb_monitors")),
     ]
+    from nj import wb
+    from nj.common import ROOT
+    for fp in ("PREREG.md", "config.json", "splits.json", "AMENDMENT-1.md", "PREREG-HASH.txt"):
+        wb.artifact(ROOT / "prereg" / fp, "prereg-" + fp.replace(".", "-"), "prereg")
     event("🌙 overnight runner started")
     for stage, fn, gates in plan:
         if not step(stage, fn, *gates):
@@ -65,4 +69,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from nj import wb
+    wb.start("all")
     main()

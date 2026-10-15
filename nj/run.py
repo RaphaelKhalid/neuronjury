@@ -78,6 +78,8 @@ def wait(call, stage: str, job_name: str, cap_kind: str = "modal") -> dict:
             raise SystemExit(f"{job_name} crashed")
         j = prog.get(job_name) or {}
         if j:
+            from nj import wb
+            wb.log({f"job/{job_name}/{k}": v for k, v in j.items() if isinstance(v, (int, float)) and k not in ("start", "last")})
             update_stage(stage, state="running", done=j.get("done", 0), total=j.get("total", 0), unit=j.get("unit", ""),
                          note=f"{job_name} · {j.get('gpu')} · ${j.get('usd', 0):.3f}" + (f" · loss {j['loss']}" if "loss" in j else ""))
     if res.get("usd"):
@@ -200,5 +202,8 @@ def smoke():
 
 
 if __name__ == "__main__":
+    from nj import wb
     cmd = sys.argv[1] if len(sys.argv) > 1 else "smoke"
+    if cmd == "smoke":
+        wb.start(cmd)
     {"deploy": deploy, "upload": upload_inputs, "smoke": smoke, "reconcile": reconcile}[cmd]()

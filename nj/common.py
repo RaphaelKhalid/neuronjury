@@ -73,6 +73,9 @@ def update_stage(name: str, **fields) -> None:
         rec.update(fields)
         rec["updated"] = time.time()
         atomic_write_json(STATUS, st)
+    from nj import wb
+    wb.log({f"stage/{name}/{k}": v for k, v in rec.items() if isinstance(v, (int, float)) and k not in ("updated", "started")}
+           | {f"stage/{name}/state": {"pending": 0, "running": 1, "paused": 2, "done": 3, "failed": -1}.get(rec.get("state"), 0)})
 
 
 def bump(counter: str, by: float = 1) -> None:
@@ -80,6 +83,8 @@ def bump(counter: str, by: float = 1) -> None:
         st = read_status()
         st["counters"][counter] = st["counters"].get(counter, 0) + by
         atomic_write_json(STATUS, st)
+    from nj import wb
+    wb.log({f"counter/{counter}": st["counters"][counter]})
 
 
 def set_counter(counter: str, value: float) -> None:
@@ -87,6 +92,8 @@ def set_counter(counter: str, value: float) -> None:
         st = read_status()
         st["counters"][counter] = value
         atomic_write_json(STATUS, st)
+    from nj import wb
+    wb.log({f"counter/{counter}": value})
 
 
 def event(text: str, kind: str = "info") -> None:
@@ -95,6 +102,8 @@ def event(text: str, kind: str = "info") -> None:
         st["events"] = (st.get("events", []) + [{"t": time.time(), "kind": kind, "text": text}])[-200:]
         atomic_write_json(STATUS, st)
     print(f"[{kind}] {text}", flush=True)
+    from nj import wb
+    wb.event(text, kind)
 
 
 # ---------- spend ----------
@@ -103,6 +112,8 @@ def log_spend(kind: str, usd: float, **meta) -> None:
     SPEND_LOG.parent.mkdir(parents=True, exist_ok=True)
     with _lock, open(SPEND_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps({"t": time.time(), "kind": kind, "usd": usd, **meta}) + "\n")
+    from nj import wb
+    wb.log({f"spend/{kind}_usd": spent(kind)})
 
 
 def spent(kind: str) -> float:

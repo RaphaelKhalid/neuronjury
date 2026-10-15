@@ -181,5 +181,7 @@ def gate():
 
 
 if __name__ == "__main__":
+    from nj import wb
+    wb.start("pipeline")
     {"weights": weights, "finetune": finetune, "generate": generate, "label": label, "gate": gate,
      "summary": summarize_labels}[sys.argv[1]]()

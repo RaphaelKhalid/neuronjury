@@ -259,6 +259,9 @@ def score():
                "monitors": {m: {k: x for k, x in r.items() if not k.startswith("_")} for m, r in res["monitors"].items()},
                "n": {k: res[k] for k in ("n_cal", "n_attack", "n_test_honest", "attempt_success_rate")}}
     (RUNS / "results.json").write_text(json.dumps(summary, indent=1, default=float))
+    from nj import wb
+    wb.artifact(RUNS / "results.json", "results", "results")
+    wb.log({f"result/{m}/{k}": x for m, r_ in summary["monitors"].items() for k, x in r_.items() if isinstance(x, (int, float))})
     update_stage("scoring", state="done", note=" · ".join(f"{m} TPR {r['tpr']:.2f}" for m, r in summary["monitors"].items() if "tpr" in r))
     update_stage("verdict", state="done", note=f"{v['verdict']} (best black-box {v['best_black_box']})")
     event(f"🏁 VERDICT: {v['verdict']} · J TPR@2% {res['monitors']['J']['tpr']:.2f} vs {bb_best} {res['monitors'][bb_best]['tpr']:.2f} "
@@ -267,4 +270,6 @@ def score():
 
 
 if __name__ == "__main__":
+    from nj import wb
+    wb.start("finish")
     {"monitors": monitors, "test_capture": test_capture, "score": score}[sys.argv[1]]()
