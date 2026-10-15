@@ -227,9 +227,84 @@ def feed_snapshot():
     return items
 
 
+RUNS = os.path.join(ROOT, "runs")
+MODAL_PROGRESS = {"jobs": {}, "ok": False, "err": "", "t": 0}
+GPU_PRICE = {"H100": 0.001097, "A100-80GB": 0.000694, "A100-40GB": 0.000583, "L40S": 0.000542,
+             "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131}
+
+
+def poll_modal_forever():
+    """Background thread: mirror the Modal Dict of remote job progress every 3 s."""
+    import time
+    try:
+        import modal
+        d = modal.Dict.from_name("nj-progress", create_if_missing=True)
+        c = modal.Dict.from_name("nj-control", create_if_missing=True)
+    except Exception as e:
+        MODAL_PROGRESS["err"] = f"modal unavailable: {e}"
+        return
+    while True:
+        try:
+            jobs = {k: v for k, v in d.items()}
+            MODAL_PROGRESS.update(jobs=jobs, ok=True, err="", t=time.time(), pause=bool(c.get("pause", False)))
+        except Exception as e:
+            MODAL_PROGRESS.update(ok=False, err=str(e)[:200])
+        time.sleep(3)
+
+
+def experiment_snapshot():
+    import time
+    try:
+        with open(os.path.join(RUNS, "status.json"), encoding="utf-8") as f:
+            st = json.load(f)
+    except Exception:
+        st = {"stages": {}, "counters": {}, "events": []}
+    spend = {"modal_logged": 0.0, "anthropic": 0.0}
+    try:
+        with open(os.path.join(RUNS, "spend.jsonl"), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                k = "modal_logged" if r.get("kind") == "modal" else r.get("kind")
+                spend[k] = spend.get(k, 0.0) + float(r.get("usd", 0))
+    except FileNotFoundError:
+        pass
+    jobs = MODAL_PROGRESS.get("jobs", {})
+    live = 0.0
+    now = time.time()
+    for j in jobs.values():
+        if j.get("state") == "running":
+            live += max(0.0, now - j.get("start", now)) * GPU_PRICE.get(j.get("gpu", ""), 0)
+    spend["modal_live"] = live
+    try:
+        with open(os.path.join(ROOT, "prereg", "config.json"), encoding="utf-8") as f:
+            caps = json.load(f)["spend_caps_usd"]
+    except Exception:
+        caps = {}
+    return {"status": st, "modal": MODAL_PROGRESS, "spend": spend, "caps": caps,
+            "paused": os.path.exists(os.path.join(RUNS, "PAUSE")) or bool(MODAL_PROGRESS.get("pause"))}
+
+
+def set_pause(on):
+    """Same effect as `python -m nj.ctl pause|resume`."""
+    import subprocess, sys
+    subprocess.run([sys.executable, "-m", "nj.ctl", "pause" if on else "resume"], cwd=ROOT, timeout=60)
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=HERE, **kw)
+
+    def do_POST(self):
+        if self.path.startswith("/api/pause"):
+            set_pause(True)
+            return self.send_json({"ok": True, "paused": True})
+        if self.path.startswith("/api/resume"):
+            set_pause(False)
+            return self.send_json({"ok": True, "paused": False})
+        self.send_error(404)
 
     def log_message(self, *a):
         pass
@@ -246,11 +321,15 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/feed"):
             return self.send_json(feed_snapshot())
+        if self.path.startswith("/api/experiment"):
+            return self.send_json(experiment_snapshot())
         if self.path.startswith("/api/agents"):
             return self.send_json(agents_snapshot())
         return super().do_GET()
 
 
 if __name__ == "__main__":
+    import threading
+    threading.Thread(target=poll_modal_forever, daemon=True).start()
     print(f"viewport on http://localhost:{PORT}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
