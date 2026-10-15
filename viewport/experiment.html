@@ -120,7 +120,10 @@
   td { padding: .3vh .2vw; border-bottom: 1px solid var(--faint); white-space: nowrap; max-width: 9vw; overflow: hidden; text-overflow: ellipsis; }
   .logbox { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
   .log { list-style: none; margin: 0; padding: 0; overflow: auto; font: 400 clamp(10.5px, 1.3vh, 14px)/1.4 var(--mono); min-height: 0; }
-  .log li { display: grid; grid-template-columns: 5.2vw 1fr; gap: .4vw; padding: .25vh 0; border-bottom: 1px dotted var(--faint); }
+  .log li { display: grid; grid-template-columns: max-content 1.5em minmax(0, 1fr); column-gap: .6em; align-items: baseline;
+            padding: .25vh 0; border-bottom: 1px dotted var(--faint); }
+  .log .ic { justify-self: center; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
+  .log li > :last-child { overflow-wrap: anywhere; }
   .log .ts { color: var(--ink2); }
   .log .error { color: var(--rust); }
   .err { color: var(--rust); font: 400 clamp(10.5px, 1.2vh, 13px) var(--mono); }
@@ -244,6 +247,8 @@ const COUNTERS = [
 const PRICE = { "H100": 0.001097, "A100-80GB": 0.000694, "L40S": 0.000542, "A10G": 0.000306, "A10": 0.000306, "L4": 0.000222, "CPU": 0.0000262 };
 const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650" };
 const $ = id => document.getElementById(id);
+// a leading emoji (with variation selectors / ZWJ sequences / keycaps) gets its own column in the event log
+const EMOJI_LEAD = /^\s*((?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[#*0-9]️?⃣)(?:️|‍(?:\p{Extended_Pictographic}|\p{Emoji_Component})|\p{Emoji_Modifier})*)\s*/u;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
 const shown = {}, target = {}, usdKeys = new Set(["modal_usd", "anthropic_usd"]);
 $("counters").innerHTML = COUNTERS.map(([k, l, c]) => `<div class="ct"><div class="v" id="v-${k}" style="color:${c}">0</div><div class="k">${l}</div></div>`).join("");
@@ -353,8 +358,9 @@ async function poll() {
     return `<tr><td title="${esc(k)}">${esc(k)}</td><td>${esc(j.gpu)}</td><td>${Number(j.done || 0).toLocaleString()} / ${Number(j.total || 0).toLocaleString()}</td><td>$${usd.toFixed(3)}</td><td><span class="chip ${esc(j.state)}">${esc(j.state)}</span></td></tr>`; }).join("")
     || `<tr><td colspan="5" class="cap">no remote jobs yet</td></tr>`;
   $("merr").textContent = d.modal?.ok === false && d.modal?.err ? `Modal link: ${d.modal.err}` : "";
-  $("ev").innerHTML = (st.events || []).slice().reverse().slice(0, 150).map(x =>
-    `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span><span class="${x.kind === "error" ? "error" : ""}">${esc(x.text)}</span></li>`).join("");
+  $("ev").innerHTML = (st.events || []).slice().reverse().slice(0, 150).map(x => {
+    const m = String(x.text || "").match(EMOJI_LEAD), ic = m ? m[1] : "", text = m ? x.text.slice(m[0].length) : x.text;
+    return `<li><span class="ts">${new Date(x.t * 1000).toLocaleTimeString("en-GB", { hour12: false })}</span><span class="ic">${esc(ic)}</span><span class="${x.kind === "error" ? "error" : ""}">${esc(text)}</span></li>`; }).join("");
   drawFigures(d);
 }
 function frame() {
