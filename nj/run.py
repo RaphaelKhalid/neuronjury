@@ -131,7 +131,7 @@ def smoke():
     dev = c["models"]["dev_model"]
     update_stage("smoke", state="running", note="Modal smoke on Qwen3-0.6B (cheap L4)")
     run_job("smoke", "stage_model", "weights:Qwen3-0.6B", dict(repo=dev["repo"], revision=dev["revision"], name="Qwen3-0.6B"), 0.05)
-    run_job("smoke", "finetune", "finetune:B-smoke", dict(variant="B", base="Qwen3-0.6B", max_usd=0.4, smoke_steps=6, gpu_label="L4"), 0.4, gpu="L4")
+    run_job("smoke", "finetune", "finetune:B-smoke", dict(variant="B", base="Qwen3-0.6B", max_usd=0.4, smoke_steps=6, gpu_label="L40S"), 0.4, gpu="L4")
 
     prompts = [json.loads(l) for l in (DATA / "prompts.jsonl").read_text(encoding="utf-8").splitlines()]
     pick = [p for p in prompts if p["split"] == "DISC_A"][:8]
@@ -144,7 +144,7 @@ def smoke():
     wf.parent.mkdir(parents=True, exist_ok=True)
     wf.write_text("".join(json.dumps(w) + "\n" for w in work), encoding="utf-8")
     put(wf, "/work/gen_smoke.jsonl")
-    run_job("smoke", "generate", "generate:smoke", dict(tag="smoke", base="Qwen3-0.6B", max_usd=0.4, tp=1, chunk=8, gpu_label="L4"), 0.4, gpu="L4")
+    run_job("smoke", "generate", "generate:smoke", dict(tag="smoke", base="Qwen3-0.6B", max_usd=0.4, tp=1, chunk=8, gpu_label="L40S"), 0.4, gpu="L4")
 
     get("/out/gen_smoke", RUNS / "out" / "gen_smoke")
     gens = [json.loads(l) for f in sorted((RUNS / "out" / "gen_smoke").rglob("*.jsonl")) for l in f.read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -159,7 +159,7 @@ def smoke():
     cf = RUNS / "work" / "cap_smoke.jsonl"
     cf.write_text("".join(json.dumps(x) + "\n" for x in cap), encoding="utf-8")
     put(cf, "/work/cap_smoke.jsonl")
-    res = run_job("smoke", "capture", "capture:smoke", dict(tag="smoke", base="Qwen3-0.6B", max_usd=0.4, shard=8, gpu_label="L4"), 0.4, gpu="L4")
+    res = run_job("smoke", "capture", "capture:smoke", dict(tag="smoke", base="Qwen3-0.6B", max_usd=0.4, shard=8, gpu_label="L40S"), 0.4, gpu="L4")
 
     t0 = time.time()
     results = list(fn("run_tests").map([tests[i:i + 4] for i in range(0, len(tests), 4)]))

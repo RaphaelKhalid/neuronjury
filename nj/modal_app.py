@@ -25,7 +25,7 @@ control = modal.Dict.from_name("nj-control", create_if_missing=True)
 spend = modal.Dict.from_name("nj-spend", create_if_missing=True)
 
 PRICE = {"H100": 0.001097, "A100-80GB": 0.000694, "A100-80GB:2": 2 * 0.000694, "L40S": 0.000542,
-         "A10": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131 * 2}
+         "A10": 0.000306, "A10G": 0.000306, "L4": 0.000222, "T4": 0.000164, "CPU": 0.0000131 * 2}
 STARTUP_S = 90  # billed container start-up we cannot see from inside; charged conservatively
 
 base_image = (modal.Image.debian_slim(python_version="3.12")
@@ -278,6 +278,7 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
 # ---------------------------------------------------------------- generation (vLLM, 2 GPUs)
 
 GEN_GPU = "A100-80GB:2"
+SMALL_GPU = ["L4", "A10G", "L40S"]  # fallback list: whichever small GPU is free first
 
 
 def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192, gpu_label: str = GEN_GPU) -> dict:
@@ -470,7 +471,7 @@ def finetune(**kw) -> dict:
     return _finetune(**kw)
 
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def finetune_small(**kw) -> dict:
     return _finetune(**kw)
 
@@ -479,7 +480,7 @@ def generate(**kw) -> dict:
     return _generate(**kw)
 
 
-@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def generate_small(**kw) -> dict:
     return _generate(**kw)
 
@@ -488,7 +489,7 @@ def capture(**kw) -> dict:
     return _capture(**kw)
 
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def capture_small(**kw) -> dict:
     return _capture(**kw)
 
@@ -497,7 +498,7 @@ def score_qwen(**kw) -> dict:
     return _score_qwen(**kw)
 
 
-@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def score_qwen_small(**kw) -> dict:
     return _score_qwen(**kw)
 

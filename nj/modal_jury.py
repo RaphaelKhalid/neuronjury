@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from nj.modal_app import VOL, Job, app, hf_image, read_jsonl, vol
+from nj.modal_app import SMALL_GPU, VOL, Job, app, hf_image, read_jsonl, vol
 
 
 def _load_rows(tag: str, want: set):
@@ -247,7 +247,7 @@ def contexts(**kw) -> dict:
     return _contexts(**kw)
 
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def contexts_small(**kw) -> dict:
     return _contexts(**kw)
 
@@ -257,14 +257,14 @@ def falsify(**kw) -> dict:
     return _falsify(**kw)
 
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=2 * 3600)
 def falsify_small(**kw) -> dict:
     return _falsify(**kw)
 
 
 # ---------------------------------------------------------------- TXT: supervision control (text classifier, LoRA)
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=3 * 3600)
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu=SMALL_GPU, timeout=3 * 3600)
 def txt_classifier(tag: str, base: str, max_usd: float, epochs: int = 2, lr: float = 1e-4, max_len: int = 3072) -> dict:
     """/vol/work/txt_{tag}.json: {"train": [{key, text, y}], "score": [{key, text}]}. Same text the black-box monitors read.
     Trains a LoRA sequence classifier on DISC labels only, then scores CAL+TEST."""
@@ -274,7 +274,7 @@ def txt_classifier(tag: str, base: str, max_usd: float, epochs: int = 2, lr: flo
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     spec = json.loads((VOL / "work" / f"txt_{tag}.json").read_text())
     tr, sc = spec["train"], spec["score"]
-    job = Job(f"txt:{tag}", "L4", epochs * len(tr) + len(sc), "examples", max_usd)
+    job = Job(f"txt:{tag}", "L40S", epochs * len(tr) + len(sc), "examples", max_usd)
     mpath = VOL / "models" / base
     tok = AutoTokenizer.from_pretrained(mpath)
     if tok.pad_token is None:
