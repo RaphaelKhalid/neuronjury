@@ -138,6 +138,7 @@ def stage_model(repo: str, revision: str, name: str) -> dict:
     dest = VOL / "models" / name
     job = Job(f"weights:{name}", "CPU", 1, "model", max_usd=1.0, note=repo)
     if (dest / "DONE").exists() and (dest / "DONE").read_text().strip() == revision:
+        job.done = 1
         return job.end("done", skipped=True)
     snapshot_download(repo, revision=revision, local_dir=str(dest),
                       allow_patterns=["*.json", "*.safetensors", "*.txt", "tokenizer*", "merges.txt", "vocab.json"])
