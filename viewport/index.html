@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Already Clean · Live</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #fff;
+    --dim: #8a8a8a;
+    --faint: #2a2a2a;
+    --green: #39ff88;
+    --pink: #ff3b7f;
+    --blue: #59c2ff;
+    --amber: #ffc53d;
+    --violet: #b98cff;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+    --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+  body { min-height: 100vh; overflow-x: hidden; padding: 20px clamp(16px, 3vw, 40px) 40px; }
+
+  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--pink); font-weight: 800; }
+  .live i { width: 10px; height: 10px; border-radius: 50%; background: var(--pink); box-shadow: 0 0 12px var(--pink); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .clock { margin-left: auto; color: var(--fg); font-size: clamp(16px, 2vw, 22px); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .phase { color: var(--green); font-weight: 800; }
+
+  .hero { margin: clamp(24px, 5vh, 56px) 0 22px; min-height: 38vh; display: flex; flex-direction: column; justify-content: center; }
+  .kind { font-family: var(--mono); font-size: clamp(12px, 1.3vw, 15px); letter-spacing: .14em; text-transform: uppercase; font-weight: 800; margin-bottom: 14px; }
+  .headline { font-size: clamp(34px, 6.2vw, 92px); line-height: 1.02; font-weight: 900; letter-spacing: -.025em; margin: 0; text-wrap: balance; }
+  .headline .cur { display: inline-block; width: .08em; height: .9em; background: var(--green); vertical-align: -.08em; margin-left: .06em; animation: pulse .6s infinite; }
+  .detail { margin-top: 18px; max-width: 70ch; font-size: clamp(16px, 1.6vw, 21px); line-height: 1.45; color: #bdbdbd; min-height: 2.9em; }
+  .stat { margin-top: 22px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .stat .n { font-family: var(--mono); font-weight: 900; font-size: clamp(56px, 11vw, 168px); line-height: .9; font-variant-numeric: tabular-nums; color: var(--green); text-shadow: 0 0 28px rgba(57,255,136,.35); }
+  .stat .u { font-size: clamp(22px, 3vw, 44px); font-weight: 900; color: var(--green); }
+  .stat .l { font-size: clamp(14px, 1.4vw, 18px); color: var(--dim); max-width: 34ch; }
+  .by { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: #555; }
+
+  .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border-top: 1px solid var(--faint); border-left: 1px solid var(--faint); margin: 10px 0 28px; }
+  .c { background: var(--bg); padding: 16px 16px 14px; border-right: 1px solid var(--faint); border-bottom: 1px solid var(--faint); }
+  .c .v { font-family: var(--mono); font-weight: 900; font-size: clamp(22px, 2.5vw, 40px); white-space: nowrap; line-height: 1; font-variant-numeric: tabular-nums; }
+  .c .k { margin-top: 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+
+  .lanes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 0 0 32px; }
+  .lane { border: 1px solid #1c1c1c; padding: 14px 14px 10px; position: relative; overflow: hidden; background: #000; transition: border-color .4s; }
+  .lane.run { border-color: #1f3b2b; }
+  .lane.run::before { content: ""; position: absolute; left: 0; top: 0; height: 2px; width: 40%; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: scan 1.6s linear infinite; }
+  @keyframes scan { from { left: -40%; } to { left: 100%; } }
+  .lane.done { opacity: .62; }
+  .lh { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .run .dot { background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse .9s infinite; }
+  .done .dot { background: #555; }
+  .lname { font-weight: 900; font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lh { flex-wrap: wrap; }
+  .lname { flex: 1; min-width: 0; }
+  .lphase { flex-basis: 100%; padding-left: 17px; margin-top: 3px; font-family: var(--mono); font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .1em; white-space: nowrap; }
+  .lnow { margin: 10px 0 8px; font-size: 15px; font-weight: 800; line-height: 1.3; min-height: 2.6em; }
+  .lnow .think { color: var(--violet); }
+  .lstats { display: flex; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+  .lstats b { color: #ddd; font-weight: 800; }
+  .lbar { height: 3px; background: #161616; margin-top: 9px; }
+  .lbar i { display: block; height: 100%; background: var(--blue); transition: width .6s; }
+  .llog { list-style: none; margin: 10px 0 0; padding: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: #8a8a8a; }
+  .llog li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .llog li:first-child { color: #cfcfcf; }
+  .llog .ts { color: #444; margin-right: 6px; }
+  .feedh { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; display: flex; justify-content: space-between; }
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: baseline; padding: 12px 0; border-top: 1px solid #141414; animation: in .5s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(-8px); } }
+  .feed .e { font-size: 22px; line-height: 1; }
+  .feed .h { font-size: clamp(16px, 1.7vw, 22px); font-weight: 800; line-height: 1.25; }
+  .feed .d { margin-top: 4px; color: #9a9a9a; font-size: 14px; line-height: 1.4; }
+  .feed .t { font-family: var(--mono); font-size: 11px; color: #555; white-space: nowrap; text-align: right; }
+  .feed .t b { display: block; color: #777; font-weight: 600; }
+  .empty { color: #555; font-family: var(--mono); padding: 20px 0; }
+  @media (max-width: 560px) {
+    .feed li { grid-template-columns: 28px 1fr; }
+    .feed .t { grid-column: 2; text-align: left; }
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="live"><i></i>LIVE</span>
+    <span>Deep read · “Neural Networks Are Already Clean”</span>
+    <span class="phase" id="phase">warming up</span>
+    <span class="clock" id="clock">00:00:00.000</span>
+  </div>
+
+  <section class="hero">
+    <div class="kind" id="kind" style="color:var(--blue)">⏳ standing by</div>
+    <h1 class="headline" id="headline">Agents are spinning up<span class="cur"></span></h1>
+    <div class="detail" id="detail">Findings appear here in plain English as they land.</div>
+    <div class="stat" id="stat" hidden><span class="n" id="statn">0</span><span class="u" id="statu"></span><span class="l" id="statl"></span></div>
+    <div class="by" id="by"></div>
+  </section>
+
+  <div class="counters" id="counters"></div>
+
+  <div class="feedh"><span>Agents · live activity</span><span id="lanecount">0</span></div>
+  <div class="lanes" id="lanes"></div>
+
+  <div class="feedh"><span>Everything found so far</span><span id="feedcount">0</span></div>
+  <ul class="feed" id="feed"><li class="empty">nothing yet…</li></ul>
+
+<script>
+const KINDS = {
+  phase:    { e: "🚦", c: "var(--green)",  t: "new phase" },
+  finding:  { e: "🔬", c: "var(--blue)",   t: "finding" },
+  number:   { e: "📈", c: "var(--green)",  t: "key number" },
+  question: { e: "❓", c: "var(--amber)",  t: "open question" },
+  idea:     { e: "💡", c: "var(--violet)", t: "research idea" },
+  game:     { e: "🎮", c: "var(--pink)",   t: "control game" },
+  verdict:  { e: "⚖️", c: "var(--fg)",     t: "verdict" },
+  warning:  { e: "⚠️", c: "var(--pink)",   t: "caution" },
+  cost:     { e: "💸", c: "var(--amber)",  t: "budget" },
+};
+const COUNTERS = [
+  { key: "finding",  label: "findings",        color: "var(--blue)" },
+  { key: "number",   label: "key numbers",     color: "var(--green)" },
+  { key: "question", label: "open questions",  color: "var(--amber)" },
+  { key: "idea",     label: "research ideas",  color: "var(--violet)" },
+  { key: "game",     label: "control games",   color: "var(--pink)" },
+  { key: "running",  label: "agents working now", color: "var(--green)" },
+  { key: "agents",   label: "agents launched", color: "var(--fg)" },
+  { key: "tools",    label: "actions taken",   color: "var(--fg)" },
+  { key: "pages",    label: "web pages + searches", color: "var(--fg)" },
+  { key: "tokens",   label: "tokens written",  color: "var(--fg)" },
+  { key: "chars",    label: "characters read", color: "var(--fg)" },
+];
+const $ = id => document.getElementById(id);
+const seen = new Set();
+const queue = [];
+let items = [];
+let t0 = null;
+const shown = {}, target = {};
+
+// counters
+$("counters").innerHTML = COUNTERS.map(c =>
+  `<div class="c"><div class="v" id="cv-${c.key}" style="color:${c.color}">0</div><div class="k">${c.label}</div></div>`).join("");
+COUNTERS.forEach(c => { shown[c.key] = 0; target[c.key] = 0; });
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m])); }
+function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
+
+async function poll() {
+  try {
+    const r = await fetch("/api/feed", { cache: "no-store" });
+    items = await r.json();
+    if (items.length && t0 === null) t0 = items[0].mtime * 1000;
+    const agents = new Set(), counts = {};
+    let chars = 0;
+    for (const it of items) {
+      counts[it.kind] = (counts[it.kind] || 0) + 1;
+      if (it.by) agents.add(it.by);
+      chars += Number(it.chars_read) || 0;
+      if (!seen.has(it.id)) { seen.add(it.id); queue.push(it); }
+      if (it.kind === "phase") $("phase").textContent = it.headline;
+    }
+    COUNTERS.forEach(c => {
+      if (["running", "agents", "tools", "pages", "tokens"].includes(c.key)) return;
+      target[c.key] = c.key === "chars" ? chars : (counts[c.key] || 0);
+    });
+    renderFeed();
+  } catch (e) { /* server restarting; keep last state */ }
+}
+
+// ---- agent lanes (parsed live from each agent's transcript) ----
+const laneTok = {}, laneTokTarget = {};
+function hhmmss(ts) { return ts ? new Date(ts).toLocaleTimeString("en-GB", { hour12: false }) : ""; }
+function dur(a, b) {
+  if (!a) return "";
+  const s = Math.max(0, Math.round(((b ? new Date(b) : new Date()) - new Date(a)) / 1000));
+  return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+}
+async function pollAgents() {
+  try {
+    const r = await fetch("/api/agents", { cache: "no-store" });
+    const list = await r.json();
+    list.sort((a, b) => (a.done - b.done) || (a.done ? String(b.last_ts).localeCompare(String(a.last_ts)) : String(a.first_ts).localeCompare(String(b.first_ts))));
+    const running = list.filter(a => !a.done).length;
+    target.running = running;
+    target.agents = list.length;
+    target.tools = list.reduce((s, a) => s + a.tools, 0);
+    target.pages = list.reduce((s, a) => s + a.pages + a.searches, 0);
+    target.tokens = list.reduce((s, a) => s + a.out_tokens, 0);
+    $("lanecount").textContent = `${running} running · ${list.length - running} done`;
+    const host = $("lanes");
+    const keep = new Set();
+    list.forEach((a, idx) => {
+      const id = "lane-" + a.id.replace(/[^a-z0-9]/gi, "");
+      keep.add(id);
+      let el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement("div");
+        el.id = id;
+        el.innerHTML = `<div class="lh"><span class="dot"></span><span class="lname"></span><span class="lphase"></span></div>
+          <div class="lnow"></div><div class="lstats"></div><div class="lbar" hidden><i></i></div><ul class="llog"></ul>`;
+        laneTok[id] = 0;
+      }
+      if (host.children[idx] !== el) host.insertBefore(el, host.children[idx] || null);
+      el.className = "lane " + (a.done ? "done" : "run");
+      el.querySelector(".lname").textContent = a.label;
+      el.querySelector(".lphase").textContent = `${a.phase} · ${a.done ? "done in " + dur(a.first_ts, a.last_ts) : dur(a.first_ts)}`;
+      const ev = a.events.slice().reverse();
+      const now = a.done ? "✅ Finished — results handed in" : a.thinking ? `<span class="think">🧠 Thinking…</span>` : (ev[0] ? `${ev[0].e} ${esc(ev[0].t)}` : "⏳ starting up");
+      const nowEl = el.querySelector(".lnow");
+      if (nowEl.dataset.v !== now) { nowEl.innerHTML = now; nowEl.dataset.v = now; }
+      laneTokTarget[id] = a.out_tokens;
+      el.querySelector(".lstats").innerHTML =
+        `<span><b>${a.tools}</b> actions</span>` +
+        (a.searches + a.pages ? `<span><b>${a.searches}</b> searches · <b>${a.pages}</b> pages</span>` : "") +
+        (a.runs ? `<span><b>${a.runs}</b> code runs</span>` : "") +
+        `<span><b>${a.posts}</b> posts</span>` +
+        `<span><b class="tok" data-id="${id}">${fmt(laneTok[id])}</b> tokens</span>` +
+        (a.coverage !== null ? `<span><b>${a.coverage}%</b> of section read</span>` : "");
+      const bar = el.querySelector(".lbar");
+      if (a.coverage !== null) { bar.hidden = false; bar.firstChild.style.width = a.coverage + "%"; }
+      el.querySelector(".llog").innerHTML = ev.slice(a.done ? 0 : 1, 6).map(x =>
+        `<li><span class="ts">${hhmmss(x.ts)}</span>${x.e} ${esc(x.t)}</li>`).join("");
+    });
+    [...host.children].forEach(c => { if (!keep.has(c.id)) c.remove(); });
+  } catch (e) { /* ignore */ }
+}
+function tickLanes() {
+  for (const id in laneTokTarget) {
+    const t = laneTokTarget[id], s = laneTok[id] || 0;
+    if (s === t) continue;
+    laneTok[id] = s < t ? Math.min(t, s + Math.max(1, (t - s) * 0.15)) : t;
+    const b = document.querySelector(`b.tok[data-id="${id}"]`);
+    if (b) b.textContent = fmt(laneTok[id] < t ? laneTok[id] + Math.random() * 9 : t);
+  }
+}
+
+function renderFeed() {
+  const list = items.filter(i => i.kind !== "phase" || true).slice().reverse().slice(0, 120);
+  $("feedcount").textContent = items.length + " items";
+  if (!list.length) return;
+  const html = list.map(it => {
+    const k = KINDS[it.kind] || KINDS.finding;
+    const ago = t0 ? fmtClock(it.mtime * 1000 - t0, false) : "";
+    return `<li data-id="${esc(it.id)}"><span class="e">${it.emoji || k.e}</span>
+      <div><div class="h">${esc(it.headline)}</div>${it.detail ? `<div class="d">${esc(it.detail)}</div>` : ""}</div>
+      <div class="t"><b>${esc(it.by || "")}</b>${ago}</div></li>`;
+  }).join("");
+  const feed = $("feed");
+  if (feed.dataset.n !== String(items.length)) { feed.innerHTML = html; feed.dataset.n = items.length; }
+}
+
+// hero: typewriter + fast count-up
+let heroBusyUntil = 0, typing = null, stat = null;
+function showHero(it) {
+  const k = KINDS[it.kind] || KINDS.finding;
+  $("kind").textContent = `${it.emoji || k.e} ${k.t}`;
+  $("kind").style.color = k.c;
+  $("detail").textContent = it.detail || "";
+  $("by").textContent = it.by ? `— ${it.by}` : "";
+  const full = String(it.headline || "");
+  let i = 0;
+  const h = $("headline");
+  clearInterval(typing);
+  typing = setInterval(() => {
+    i = Math.min(full.length, i + 2);
+    h.innerHTML = esc(full.slice(0, i)) + '<span class="cur"></span>';
+    if (i >= full.length) clearInterval(typing);
+  }, 14);
+  if (it.stat && it.stat.value !== undefined && !isNaN(Number(it.stat.value))) {
+    $("stat").hidden = false;
+    $("statu").textContent = it.stat.unit || "";
+    $("statl").textContent = it.stat.label || "";
+    const v = Number(it.stat.value);
+    const dec = String(it.stat.value).includes(".") ? String(it.stat.value).split(".")[1].length : 0;
+    stat = { from: 0, to: v, dec, start: performance.now(), dur: 1400 };
+  } else { $("stat").hidden = true; stat = null; }
+  const backlog = queue.length;
+  heroBusyUntil = performance.now() + (backlog > 6 ? 1300 : backlog > 2 ? 2300 : 3600);
+}
+
+function fmtClock(ms, withMs = true) {
+  ms = Math.max(0, ms);
+  const h = Math.floor(ms / 3.6e6), m = Math.floor(ms / 6e4) % 60, s = Math.floor(ms / 1000) % 60, x = Math.floor(ms % 1000);
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return withMs ? `${p(h)}:${p(m)}:${p(s)}.${p(x, 3)}` : `+${p(h)}:${p(m)}:${p(s)}`;
+}
+
+function frame(now) {
+  if (t0 !== null) $("clock").textContent = fmtClock(Date.now() - t0);
+  if (now > heroBusyUntil && queue.length) showHero(queue.shift());
+  if (stat) {
+    const p = Math.min(1, (now - stat.start) / stat.dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    let v = stat.from + (stat.to - stat.from) * e;
+    let txt = v.toFixed(stat.dec);
+    if (p < 1) { // slot-machine jitter on the last digits while counting
+      const jitter = Math.floor(Math.random() * 10);
+      txt = txt.slice(0, -1) + jitter;
+    } else txt = stat.to.toFixed(stat.dec);
+    $("statn").textContent = Number(txt).toLocaleString("en-US", { minimumFractionDigits: stat.dec, maximumFractionDigits: stat.dec });
+  }
+  COUNTERS.forEach(c => {
+    const t = target[c.key], s = shown[c.key];
+    if (s !== t) {
+      const step = Math.max(1, Math.abs(t - s) * 0.12);
+      shown[c.key] = s < t ? Math.min(t, s + step) : Math.max(t, s - step);
+      const el = $("cv-" + c.key);
+      const n = Math.round(shown[c.key]);
+      el.textContent = shown[c.key] !== t && t > 20 ? fmt(n + Math.floor(Math.random() * 9)) : fmt(n);
+    }
+  });
+  tickLanes();
+  requestAnimationFrame(frame);
+}
+
+poll();
+pollAgents();
+setInterval(poll, 700);
+setInterval(pollAgents, 600);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
