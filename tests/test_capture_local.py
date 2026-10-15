@@ -75,3 +75,14 @@ def test_hooks_read_only_exact_and_batch_invariant():
     assert torch.equal(again["resid"], res["resid"]) and torch.equal(again["surprisal"], res["surprisal"])
     print(f"✅ single-sample recording is bit-for-bit repeatable; surprisal {res['surprisal'][0].tolist()}; "
           f"resid {tuple(res['resid'].shape)}; readings per sample {res['mlp_max'][0].numel():,}")
+
+    # TEST-time subset recording (jurors only) must equal the dense recording, layout [sample, channel, neuron]
+    rec2.remove()
+    sel = {2: torch.tensor([5, 100, 777]), 9: torch.tensor([42])}
+    rec3 = Recorder(model, resid_layers=[3, 10], neurons=sel)
+    sub, _ = record_batch(model, rec3, [s1], [c1], pad_id=tok.pad_token_id or 0)
+    for layer, ids in sel.items():
+        got = sub["subset"][layer][0]                 # [4, n_sel]
+        want = res["mlp_max"][0, layer][:, ids]        # [4, n_sel]
+        assert got.shape == want.shape and torch.equal(got, want), f"subset layout mismatch at layer {layer}"
+    print("✅ juror-only recording equals dense recording ([sample, channel, neuron])")
