@@ -55,3 +55,6 @@
 
 ### Safety
 32. Keep backdoor-organism weights private.
+
+## Planning rule
+- No calendar estimates (days/weeks). Plans are ordered steps with GPU-minutes, tokens and dollars; the run is agent-driven and meant to finish overnight.
