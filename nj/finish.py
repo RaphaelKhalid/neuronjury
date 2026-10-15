@@ -138,7 +138,7 @@ def test_values():
             jur = []
             for j in jury["jurors"]:
                 col = neurons[str(j["layer"])].index(j["neuron"])
-                jur.append(float(z[f"sub_{j['layer']}"][i, col, j["channel"]]))
+                jur.append(float(z[f"sub_{j['layer']}"][i, j["channel"], col]))  # stored as [sample, channel, neuron]
             out[k] = {"jur": jur, "resid": z["resid"][i].astype(np.float32), "sur": z["surprisal"][i].tolist()}
     return out
 
