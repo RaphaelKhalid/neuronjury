@@ -168,7 +168,7 @@ def stage_model(repo: str, revision: str, name: str) -> dict:
 _PUZZLES: dict | None = None
 
 
-@app.function(image=base_image, volumes={str(VOL): vol}, cpu=1, memory=2048, timeout=1800, max_containers=48)
+@app.function(image=base_image, volumes={str(VOL): vol}, cpu=1, memory=4096, timeout=900, max_containers=48)
 def run_tests(items: list[dict]) -> list[dict]:
     """items: {key, pid, code, exploit}. Executed only here, never on the user's machine."""
     global _PUZZLES
