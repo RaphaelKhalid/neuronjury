@@ -52,6 +52,7 @@
 29. Develop everything on Qwen3-0.6B/1.7B/8B first (free); Qwen3-32B weights on a Modal Volume.
 30. Save results incrementally (resumable JSONL); job timeouts + spend cap so credit exhaustion can't lose work.
 31. Reuse interpcontrol: analyze.py (stats), label.py (code positions), monitor.py (digit-logprob scoring), generate.py (resumable gen, ablation hooks), prereg/.
+33. Record all FOUR SwiGLU sign regimes (add gate<0 & value>0, the quiet small-negative corner) as a free check that nothing hides there; the jury still uses the three from the essay unless the fourth carries signal on train-A.
 
 ### Safety
 32. Keep backdoor-organism weights private.
