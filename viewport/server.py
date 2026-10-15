@@ -319,6 +319,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path in ("/", "/index.html"):  # the live experiment is the front page; old deep-read feed is /research.html
+            self.send_response(302)
+            self.send_header("Location", "/experiment.html")
+            self.end_headers()
+            return
         if self.path.startswith("/api/feed"):
             return self.send_json(feed_snapshot())
         if self.path.startswith("/api/experiment"):
