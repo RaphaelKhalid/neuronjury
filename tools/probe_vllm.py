@@ -1,4 +1,4 @@
-"""CPU probe of the vLLM image (fractions of a cent): where is nvcc, what does the sampler read?
+"""CPU probe of the vLLM image (fractions of a cent): versions, Qwen3 support, sampler mode.
 python -m modal run tools/probe_vllm.py"""
 import modal
 
@@ -7,23 +7,18 @@ from nj.modal_app import vllm_image
 app = modal.App("nj-probe")
 
 
-@app.function(image=vllm_image, cpu=1, timeout=300)
+@app.function(image=vllm_image, cpu=1, timeout=600)
 def probe():
-    import glob
     import os
-    import subprocess
     import torch
+    import transformers
     import vllm
-    out = {"torch": torch.__version__, "torch_cuda": torch.version.cuda, "vllm": vllm.__version__}
-    out["nvcc"] = glob.glob("/usr/local/lib/python3.12/site-packages/nvidia/**/bin/nvcc", recursive=True)
-    out["cuda_h"] = glob.glob("/usr/local/lib/python3.12/site-packages/nvidia/**/include/cuda.h", recursive=True)[:3]
-    src = open(os.path.join(os.path.dirname(vllm.__file__), "v1/worker/gpu/sample/sampler.py")).read()
-    tk = open(os.path.join(os.path.dirname(vllm.__file__), "v1/sample/ops/topk_topp_sampler.py")).read()
-    out["sampler_env_refs"] = sorted({w for w in src.replace("(", " ").replace(")", " ").split() if "VLLM_" in w})
-    out["topk_env_refs"] = sorted({w for w in tk.replace("(", " ").replace(")", " ").split() if "VLLM_" in w or "flashinfer" in w.lower()})[:30]
-    i = tk.find("def flashinfer_sample")
-    j = tk.rfind("flashinfer", 0, i)
-    out["topk_context"] = tk[max(0, i - 1500):i][-1500:]
+    from vllm.model_executor.models import ModelRegistry
+    out = {"torch": torch.__version__, "torch_cuda": torch.version.cuda, "vllm": vllm.__version__,
+           "transformers": transformers.__version__, "qwen3": "Qwen3ForCausalLM" in ModelRegistry.get_supported_archs(),
+           "flashinfer_sampler_env": os.environ.get("VLLM_USE_FLASHINFER_SAMPLER")}
+    from nj.prompts import TURN2  # the app's own modules import cleanly in this image
+    out["nj_import"] = bool(TURN2)
     return out
 
 
