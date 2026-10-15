@@ -286,7 +286,11 @@ def push_cloud(now):
         with open(os.path.join(ROOT, "runs", "cloud_push.json"), encoding="utf-8") as f:
             target = json.load(f)
     except Exception:
-        return
+        # on another machine (e.g. a cloud session) the target comes from the environment instead of the local file
+        url, token = os.environ.get("NJ_PUSH_URL"), os.environ.get("NJ_PUSH_TOKEN")
+        if not (url and token):
+            return
+        target = {"url": url, "token": token}
     try:
         snap = experiment_snapshot()
         h = snap.get("history") or {}
