@@ -286,7 +286,7 @@ def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192
     from vllm import LLM, SamplingParams
     from vllm.inputs import TokensPrompt
     from vllm.lora.request import LoRARequest
-    from nj.data import TURN2
+    from nj.prompts import TURN2
 
     cfg = json.loads((VOL / "prereg" / "config.json").read_text())
     g = cfg["generation"]
@@ -499,3 +499,7 @@ def score_qwen(**kw) -> dict:
 @app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
 def score_qwen_small(**kw) -> dict:
     return _score_qwen(**kw)
+
+
+# jury jobs live in their own module but register on this app
+import nj.modal_jury  # noqa: E402,F401
