@@ -4,7 +4,7 @@ Can a jury of named, falsification-tested neurons inside an AI catch the backdoo
 
 Built on Nick Cammarata's essay [Neural Networks Are Already Clean](https://already-clean.goodfire.com) (Goodfire, Oct 2026). The first experiment is a Greenblatt-style (Python) APPS backdoor control game. Qwen3-32B is the untrusted coder, and Claude Haiku 5.5 (hard mode) plus Qwen3-8B (realistic mode) are the black-box monitors.
 
-Status: design only. Nothing has been run or spent.
+Status: running, paused after the threat-gate pre-check. See `HANDOFF.md`.
 
 ## Layout
 
