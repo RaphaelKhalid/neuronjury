@@ -86,10 +86,13 @@ def wait(call, stage: str, job_name: str, cap_kind: str = "modal") -> dict:
         except Exception as e:  # the remote job crashed: mark it so the monitor stops charging for it
             j = prog.get(job_name) or {}
             if j:
+                # book the crashed job's cost from its own start time (conservative: until now), at its own rate when known,
+                # because its usd counts every GPU it holds; the per-GPU table would undercount multi-GPU jobs
+                span = j.get("last", 0) - j.get("start", 0)
+                rate = (float(j["usd"]) / span if j.get("usd") and span > 5
+                        else GPU_PRICE_PER_S.get(j.get("gpu", ""), GPU_PRICE_PER_S["H100"]))
                 j.update(state="failed", last=time.time())
                 prog[job_name] = j
-                # book the crashed job's cost from its own start time (conservative: until now)
-                rate = GPU_PRICE_PER_S.get(j.get("gpu", ""), GPU_PRICE_PER_S["H100"])
                 log_spend(cap_kind, max(0.0, time.time() - j.get("start", time.time())) * rate, job=job_name, state="crashed")
             update_stage(stage, state="failed", note=f"{job_name}: {type(e).__name__}: {e}"[:300])
             event(f"❌ {job_name} crashed: {type(e).__name__}: {str(e)[:200]}", kind="error")
