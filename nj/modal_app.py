@@ -47,8 +47,9 @@ vllm_image = (modal.Image.debian_slim(python_version="3.12")
 # ---------------------------------------------------------------- helpers
 
 class Job:
-    def __init__(self, name: str, gpu: str, total: int, unit: str, max_usd: float, note: str = ""):
+    def __init__(self, name: str, gpu: str, total: int, unit: str, max_usd: float, note: str = "", ctl_key: str = "pause"):
         self.name, self.gpu, self.total, self.unit, self.max_usd = name, gpu, total, unit, max_usd
+        self.ctl_key = ctl_key  # "pause" for real runs; a separate key lets pause/resume be tested without touching them
         self.t0 = time.time() - STARTUP_S
         self.done = 0
         self._last_push = 0.0
@@ -86,7 +87,7 @@ class Job:
     def stop_reason(self) -> str | None:
         if time.time() - self._last_ctl > 3:
             try:
-                self._paused = bool(control.get("pause", False))
+                self._paused = bool(control.get(self.ctl_key, False))
             except Exception:
                 pass
             self._last_ctl = time.time()
@@ -184,7 +185,8 @@ def run_tests(items: list[dict]) -> list[dict]:
 
 # ---------------------------------------------------------------- QLoRA fine-tune (GPU)
 
-def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_label: str = "H100") -> dict:
+def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_label: str = "H100", tag_suffix: str = "",
+              ctl_key: str = "pause") -> dict:
     import math
     import random
 
@@ -195,7 +197,7 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
     cfg = json.loads((VOL / "prereg" / "config.json").read_text())
     lc = cfg["lora"]
     seed = cfg["seed"]
-    tag = f"{variant}" + ("-smoke" if smoke_steps else "")
+    tag = f"{variant}" + ("-smoke" if smoke_steps else "") + tag_suffix
     out_dir, ckpt = VOL / "adapters" / tag, VOL / "ckpt" / tag
     if (out_dir / "DONE").exists():
         return {"job": f"finetune:{tag}", "state": "done", "skipped": True, "usd": 0.0}
@@ -217,7 +219,8 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
     accum = 8
     steps_per_epoch = math.ceil(len(seqs) / accum)
     total_steps = smoke_steps or steps_per_epoch * lc["epochs"]
-    job = Job(f"finetune:{tag}", gpu_label, total_steps, "optimizer steps", max_usd, note=f"{len(seqs)} sequences, {dropped} too long")
+    job = Job(f"finetune:{tag}", gpu_label, total_steps, "optimizer steps", max_usd, note=f"{len(seqs)} sequences, {dropped} too long",
+              ctl_key=ctl_key)
 
     torch.manual_seed(seed)
     bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
