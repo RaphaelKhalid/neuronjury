@@ -1,0 +1,15 @@
+# Driver side (the machine that orchestrates). GPU work runs inside Modal images defined in nj/modal_app.py.
+modal==1.6.1
+wandb==0.28.2
+anthropic==1.0.0
+pandas==3.0.5
+pyarrow==25.0.1
+datasets==5.0.1
+huggingface_hub==1.28.0
+numpy==2.5.2
+scipy==1.18.1
+scikit-learn==1.9.1
+Pillow==12.3.0
+pytest==9.1.1
+# Only for the local recording tests in tests/test_capture_local.py (CPU is fine):
+# torch==2.6.0 transformers==5.5.4 peft==0.20.0
