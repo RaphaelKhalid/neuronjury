@@ -82,9 +82,7 @@ def run_job(stage: str, fname: str, job_name: str, kwargs: dict, projected_usd: 
         update_stage(stage, state="paused")
         raise SystemExit("⏸️ paused: not starting new jobs")
     check_cap("modal", projected_usd)
-    f = fn(fname)
-    if gpu:
-        f = f.with_options(gpu=gpu)
+    f = fn(fname + ("_small" if gpu == "L4" else ""))
     event(f"▶️ {job_name} started" + (f" on {gpu}" if gpu else "") + f" (budget ${kwargs.get('max_usd', 0):.2f})")
     res = wait(f.spawn(**kwargs), stage, job_name)
     event(f"{'✅' if res.get('state') == 'done' else '⏸️'} {job_name}: {res.get('state')} · ${res.get('usd', 0):.3f}"

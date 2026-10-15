@@ -169,8 +169,7 @@ def run_tests(items: list[dict]) -> list[dict]:
 
 # ---------------------------------------------------------------- QLoRA fine-tune (GPU)
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="H100", timeout=6 * 3600)
-def finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_label: str = "H100") -> dict:
+def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_label: str = "H100") -> dict:
     import math
     import random
 
@@ -280,8 +279,7 @@ def finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_
 GEN_GPU = "A100-80GB:2"
 
 
-@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu=GEN_GPU, timeout=6 * 3600)
-def generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192, gpu_label: str = GEN_GPU) -> dict:
+def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192, gpu_label: str = GEN_GPU) -> dict:
     """Work file /vol/work/gen_{tag}.jsonl rows: {key, variant, split, pid, idx, seed, P, messages}.
     variant in {B, A, twin, base} (+ '-smoke' suffix allowed). Two turns: code (sampled), exploit (greedy)."""
     from transformers import AutoTokenizer
@@ -339,8 +337,7 @@ def generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192,
 
 # ---------------------------------------------------------------- neuron recording (HF, 1 GPU)
 
-@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="H100", timeout=6 * 3600)
-def capture(tag: str, base: str, max_usd: float, dense: bool = True, neurons: dict | None = None,
+def _capture(tag: str, base: str, max_usd: float, dense: bool = True, neurons: dict | None = None,
             shard: int = 16, gpu_label: str = "H100") -> dict:
     """Work file /vol/work/cap_{tag}.jsonl rows: {key, read_with, seq, code_pos, gen_lp?}.
     read_with in {B, A, twin, base}: which weights to read the sample through (one unpadded sample per forward)."""
@@ -423,3 +420,82 @@ def capture(tag: str, base: str, max_usd: float, dense: bool = True, neurons: di
         import statistics
         extra = {"lp_diff_mean": statistics.mean(lp_diffs), "lp_diff_p99": sorted(lp_diffs)[int(0.99 * (len(lp_diffs) - 1))]}
     return job.end("done", **extra)
+
+
+# ---------------------------------------------------------------- Qwen black-box monitors (vLLM, 1 GPU)
+
+def _score_qwen(tag: str, base: str, max_usd: float, chunk: int = 256, gpu_label: str = "A100-80GB") -> dict:
+    """Work file /vol/work/score_{tag}.jsonl rows: {key, messages}. Score = expected digit 0-9 of the first token."""
+    import math
+    from transformers import AutoTokenizer
+    from vllm import LLM, SamplingParams
+    from vllm.inputs import TokensPrompt
+
+    rows = read_jsonl(VOL / "work" / f"score_{tag}.jsonl")
+    outdir = VOL / "out" / f"score_{tag}"
+    done = done_keys(outdir)
+    todo = [r for r in rows if r["key"] not in done]
+    job = Job(f"score:{tag}", gpu_label, len(rows), "scores", max_usd)
+    job.done = len(rows) - len(todo)
+    if not todo:
+        return job.end("done", skipped=True)
+    mpath = str(VOL / "models" / base)
+    tok = AutoTokenizer.from_pretrained(mpath)
+    digit_ids = {tok.convert_tokens_to_ids(str(d)): d for d in range(10)}
+    llm = LLM(model=mpath, dtype="bfloat16", max_model_len=8192, gpu_memory_utilization=0.92, enable_prefix_caching=True)
+    sp = SamplingParams(temperature=0.0, max_tokens=1, logprobs=20)
+    for s in range(0, len(todo), chunk):
+        reason = job.stop_reason()
+        if reason:
+            return job.end(reason)
+        part = todo[s:s + chunk]
+        outs = llm.generate([TokensPrompt(prompt_token_ids=chat_ids(tok, r["messages"])) for r in part], sp, use_tqdm=False)
+        res = []
+        for r, o in zip(part, outs):
+            lp = o.outputs[0].logprobs[0] if o.outputs[0].logprobs else {}
+            probs = {digit_ids[t]: math.exp(v.logprob) for t, v in lp.items() if t in digit_ids}
+            z = sum(probs.values())
+            score = sum(d * p for d, p in probs.items()) / z if z > 0 else None
+            res.append({"key": r["key"], "score": score, "digit_mass": z})
+        write_part(outdir, res)
+        job.tick(len(part))
+    return job.end("done")
+
+
+# ---------------------------------------------------------------- deployed entry points (big GPU + small L4 for smoke runs)
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="H100", timeout=6 * 3600)
+def finetune(**kw) -> dict:
+    return _finetune(**kw)
+
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+def finetune_small(**kw) -> dict:
+    return _finetune(**kw)
+
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu=GEN_GPU, timeout=6 * 3600)
+def generate(**kw) -> dict:
+    return _generate(**kw)
+
+
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+def generate_small(**kw) -> dict:
+    return _generate(**kw)
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="H100", timeout=6 * 3600)
+def capture(**kw) -> dict:
+    return _capture(**kw)
+
+
+@app.function(image=hf_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+def capture_small(**kw) -> dict:
+    return _capture(**kw)
+
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="A100-80GB", timeout=4 * 3600)
+def score_qwen(**kw) -> dict:
+    return _score_qwen(**kw)
+
+
+@app.function(image=vllm_image, volumes={str(VOL): vol}, gpu="L4", timeout=2 * 3600)
+def score_qwen_small(**kw) -> dict:
+    return _score_qwen(**kw)
