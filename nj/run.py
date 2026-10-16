@@ -6,6 +6,7 @@ Every remote job is resumable: re-running a command after a pause continues from
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -19,7 +20,9 @@ MODAL = [sys.executable, "-m", "modal"]
 
 
 def sh(args: list[str], check=True) -> str:
-    p = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # the Modal CLI prints ✓ and friends; without this a Windows child defaults to cp1252 and dies on them
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    p = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     if check and p.returncode != 0:
         raise RuntimeError(f"{' '.join(args)}\n{p.stdout[-2000:]}\n{p.stderr[-2000:]}")
     return p.stdout
