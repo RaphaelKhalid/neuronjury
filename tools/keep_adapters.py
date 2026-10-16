@@ -3,7 +3,8 @@
 Waits until adapters/<variant>/DONE exists on the Modal volume for every variant, then downloads
 each adapter folder. The default target is outside OneDrive so gigabytes of weights do not sync.
 
-    python -m tools.keep_adapters [target_dir]
+    python -m tools.keep_adapters [--target=DIR] [variant ...]     # default variants: B A twin
+    python -m tools.keep_adapters B2 B2-step106                    # the Amendment 2 retrain
 """
 import os
 import sys
@@ -26,14 +27,17 @@ def finished(vol: modal.Volume, v: str) -> bool:
 
 
 def main():
-    target = Path(sys.argv[1] if len(sys.argv) > 1 else Path(os.environ["USERPROFILE"]) / "neuronjury-adapters")
+    args = sys.argv[1:]
+    target = Path(next((a.split("=", 1)[1] for a in args if a.startswith("--target=")),
+                       Path(os.environ["USERPROFILE"]) / "neuronjury-adapters"))
+    variants = [a for a in args if not a.startswith("--")] or VARIANTS
     vol = modal.Volume.from_name(MODAL_VOLUME)
-    waiting = list(VARIANTS)
+    waiting = list(variants)
     while waiting:
         waiting = [v for v in waiting if not finished(vol, v)]
         if waiting:
             time.sleep(60)
-    for v in VARIANTS:
+    for v in variants:
         n = get(f"adapters/{v}", target / v)
         size = sum(f.stat().st_size for f in (target / v).rglob("*") if f.is_file())
         print(f"kept {v}: {n} files, {size / 1e9:.2f} GB -> {target / v}", flush=True)
