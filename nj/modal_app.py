@@ -188,7 +188,12 @@ def run_tests(items: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------- QLoRA fine-tune (GPU)
 
 def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu_label: str = "H100", tag_suffix: str = "",
-              ctl_key: str = "pause") -> dict:
+              ctl_key: str = "pause", data_file: str = "", warm_start: str = "", ckpt_every: int = 0,
+              token_weighted: bool = False, max_steps: int = 0) -> dict:
+    """data_file: a file under /vol/data/ instead of ft_{variant}.jsonl. warm_start: an adapter name to continue from.
+    ckpt_every: also save a usable adapter at adapters/{tag}-step{N} every N steps. token_weighted: weigh every
+    target token equally within the step instead of every sequence (a 2-token NONE then counts as 2 tokens, not as
+    a whole program). max_steps: fix the step count instead of deriving it from the data size."""
     import math
     import random
 
@@ -209,7 +214,7 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
 
     # two supervised sequences per chat: (turn-1 prompt -> code) and (turn-2 prompt -> exploit/NONE)
     seqs, dropped = [], 0
-    for r in read_jsonl(VOL / "data" / f"ft_{variant}.jsonl"):
+    for r in read_jsonl(VOL / "data" / (data_file or f"ft_{variant}.jsonl")):
         m = r["messages"]
         for upto, ans in ((2, m[2]["content"]), (4, m[4]["content"])):
             p = chat_ids(tok, m[:upto])
@@ -220,9 +225,10 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
             seqs.append((p, t))
     accum = 8
     steps_per_epoch = math.ceil(len(seqs) / accum)
-    total_steps = smoke_steps or steps_per_epoch * lc["epochs"]
-    job = Job(f"finetune:{tag}", gpu_label, total_steps, "optimizer steps", max_usd, note=f"{len(seqs)} sequences, {dropped} too long",
-              ctl_key=ctl_key)
+    total_steps = smoke_steps or max_steps or steps_per_epoch * lc["epochs"]
+    job = Job(f"finetune:{tag}", gpu_label, total_steps, "optimizer steps", max_usd,
+              note=f"{len(seqs)} sequences, {dropped} too long" + (f", {data_file}" if data_file else "")
+                   + (", per-token loss" if token_weighted else ""), ctl_key=ctl_key)
 
     torch.manual_seed(seed)
     bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
@@ -233,6 +239,8 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
     if (ckpt / "adapter_config.json").exists():
         model = PeftModel.from_pretrained(model, str(ckpt), is_trainable=True)
         state = torch.load(ckpt / "trainer.pt", weights_only=False)
+    elif warm_start:
+        model = PeftModel.from_pretrained(model, str(VOL / "adapters" / warm_start), is_trainable=True)
     else:
         model = get_peft_model(model, LoraConfig(r=lc["rank"], lora_alpha=lc["alpha"], lora_dropout=lc["dropout"],
                                                  target_modules="all-linear", task_type="CAUSAL_LM"))
@@ -251,11 +259,11 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
         random.Random(seed + epoch).shuffle(idx)
         return idx
 
-    def save(final=False):
-        target = out_dir if final else ckpt
+    def save(target: Path | None = None, trainer_state: bool = True):
+        target = target or ckpt
         target.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(str(target))
-        if not final:
+        if trainer_state:
             torch.save({**state, "opt": opt.state_dict(), "sched": sched.state_dict()}, target / "trainer.pt")
         vol.commit()
 
@@ -267,28 +275,36 @@ def _finetune(variant: str, base: str, max_usd: float, smoke_steps: int = 0, gpu
         k = state["step"] % steps_per_epoch
         batch = idx[k * accum:(k + 1) * accum]
         tot_loss, ntok = 0.0, 0
+        ntgt = sum(len(seqs[i][1]) for i in batch)
         for i in batch:
             p, t = seqs[i]
             ids = torch.tensor([p + t], device="cuda")
             labels = torch.tensor([[-100] * len(p) + t], device="cuda")
             loss = model(input_ids=ids, labels=labels).loss
-            (loss / len(batch)).backward()
-            tot_loss += loss.item()
+            # the weights of a step sum to 1 either way, so the logged loss is exactly the optimised objective
+            w = len(t) / ntgt if token_weighted else 1 / len(batch)
+            (loss * w).backward()
+            tot_loss += loss.item() * w
             ntok += len(p) + len(t)
         torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step()
         sched.step()
         opt.zero_grad(set_to_none=True)
         state["step"] += 1
-        state["losses"].append(tot_loss / len(batch))
+        state["losses"].append(tot_loss)
         job.tick(1, loss=round(state["losses"][-1], 4), tokens=ntok)
+        if ckpt_every and state["step"] % ckpt_every == 0 and state["step"] < total_steps:
+            step_dir = VOL / "adapters" / f"{tag}-step{state['step']}"
+            save(step_dir, trainer_state=False)
+            (step_dir / "DONE").write_text(json.dumps({"steps": state["step"]}))
+            vol.commit()
         if state["step"] % 20 == 0 or state["step"] == total_steps:
             save()
         reason = job.stop_reason()
         if reason and state["step"] < total_steps:
             save()
             return job.end(reason, loss=state["losses"][-1])
-    save(final=True)
+    save(out_dir, trainer_state=False)
     (out_dir / "DONE").write_text(json.dumps({"steps": state["step"], "losses": state["losses"]}))
     vol.commit()
     return job.end("done", loss=state["losses"][-1], first_loss=state["losses"][0])
