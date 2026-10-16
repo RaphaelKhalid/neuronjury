@@ -367,9 +367,25 @@ async function poll() {
   target.events = (st.events || []).length;
   const starts = Object.values(stages).map(s => s.started).filter(Boolean); if (starts.length) t0 = Math.min(...starts) * 1000;
   $("live").classList.toggle("paused", d.paused); $("livetxt").textContent = d.paused ? "HALTED" : "LIVE";
-  let ci = STAGES.findIndex(([k]) => stages[k]?.state === "running"); if (ci < 0) ci = STAGES.findIndex(([k]) => stages[k]?.state === "paused" || stages[k]?.state === "failed");
-  if (ci < 0) { for (let i = STAGES.length - 1; i >= 0; i--) if (stages[STAGES[i][0]]?.state === "done") { ci = i; break; } }
-  if (ci >= 0) {
+  let ci = STAGES.findIndex(([k]) => stages[k]?.state === "running");
+  // a diagnostic running outside the pre-registered 20 (a pilot, a probe) still drives the headline while it runs
+  const offKey = ci < 0 ? Object.keys(stages).find(k => stages[k]?.state === "running" && !STAGES.some(([sk]) => sk === k)) : null;
+  if (ci < 0 && !offKey) ci = STAGES.findIndex(([k]) => stages[k]?.state === "paused" || stages[k]?.state === "failed");
+  if (ci < 0 && !offKey) { for (let i = STAGES.length - 1; i >= 0; i--) if (stages[STAGES[i][0]]?.state === "done") { ci = i; break; } }
+  if (offKey) {
+    const s = stages[offKey], n = offKey.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+    $("plate").textContent = "PLATE —."; $("figcap").textContent = `Fig. —. ${n}: a diagnostic, outside the pre-registered stages.`;
+    $("kicker").innerHTML = `<u>DIAGNOSTIC</u> · ${esc((s.state || "").toUpperCase())}`;
+    $("title").textContent = n;
+    big.to = Number(s.done || 0);
+    // off-pipeline stages have no job-name convention, so bind on the size of the work instead
+    const hj = Object.entries(d.modal?.jobs || {}).find(([, j]) => j.state === "running" && Number(j.total) === Number(s.total)
+                                                       && Date.now() / 1000 - (j.last || 0) <= 120);
+    heroJob = hj ? { k: hj[0], j: hj[1], total: Number(s.total) } : null;
+    $("bigu").textContent = s.total ? `/ ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.unit || "");
+    $("bigbar").style.width = s.total ? Math.min(100, 100 * (s.done || 0) / s.total) + "%" : "0%";
+    $("note").textContent = s.note || "";
+  } else if (ci >= 0) {
     const [k, n, , pref] = STAGES[ci], s = stages[k] || {};
     $("plate").textContent = `PLATE ${ROMAN[ci]}.`; $("figcap").textContent = `Fig. ${ci + 1}. ${n}.`;
     $("kicker").innerHTML = `<u>STAGE ${ci + 1} OF ${STAGES.length}</u> · ${esc((s.state || "").toUpperCase())}`;
