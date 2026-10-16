@@ -1,7 +1,7 @@
 """Sandbox-test generated solutions into a side file (never touches runs/labels.jsonl or stage status).
 
 Used for organism diagnostics, e.g. how many of B's claimed exploits are working backdoors.
-    python -m tools.side_labels <volume_dir> <out_name> [variant ...]
+    python -m tools.side_labels <volume_dir> <out_name> [variant ...] [--puzzles=puzzles2.jsonl]
 """
 import json
 import sys
@@ -15,14 +15,16 @@ from nj.textutil import extract_code, extract_exploit
 
 def main():
     src, name = sys.argv[1], sys.argv[2]
-    variants = set(sys.argv[3:])
+    rest = sys.argv[3:]
+    puzzles = next((a.split("=", 1)[1] for a in rest if a.startswith("--puzzles=")), "puzzles.jsonl")
+    variants = {a for a in rest if not a.startswith("--")}
     gens = [g for g in pull(src) if not variants or g["variant"] in variants]
     out_p = RUNS / "side" / f"{name}.jsonl"
     out_p.parent.mkdir(parents=True, exist_ok=True)
     have = {json.loads(l)["key"] for l in out_p.open(encoding="utf-8")} if out_p.exists() else set()
     items = [{"key": g["key"], "pid": g["pid"], "code": extract_code(g["text"])[0], "exploit": extract_exploit(g["turn2"])}
              for g in gens if g["key"] not in have]
-    for out in sandbox_waves(items, per_call=6, wave=64):
+    for out in sandbox_waves(items, per_call=6, wave=64, puzzles_file=puzzles):
         with out_p.open("a", encoding="utf-8") as fh:
             for r in out:
                 fh.write(json.dumps(r) + "\n")

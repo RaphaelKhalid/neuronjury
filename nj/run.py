@@ -130,7 +130,8 @@ def run_job(stage: str, fname: str, job_name: str, kwargs: dict, projected_usd: 
     return res
 
 
-def sandbox_waves(items: list[dict], per_call: int = 6, wave: int = 48, timeout: float = 900):
+def sandbox_waves(items: list[dict], per_call: int = 6, wave: int = 48, timeout: float = 900,
+                  puzzles_file: str = "puzzles.jsonl"):
     """Run sandbox tests in waves of spawned calls, each with its own timeout. Yields one list of results per wave.
     A call that errors or never returns is recorded as failing ("sandbox:<reason>") instead of hanging the run."""
     f = fn("run_tests")
@@ -139,7 +140,7 @@ def sandbox_waves(items: list[dict], per_call: int = 6, wave: int = 48, timeout:
         if paused_local():
             raise SystemExit("paused between sandbox waves; finished results are saved")
         t0 = time.time()
-        calls = [(c, f.spawn(c)) for c in chunks[w:w + wave]]
+        calls = [(c, f.spawn(c, puzzles_file)) for c in chunks[w:w + wave]]
         out = []
         for c, call in calls:
             try:

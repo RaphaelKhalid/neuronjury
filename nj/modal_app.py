@@ -168,19 +168,23 @@ def stage_model(repo: str, revision: str, name: str) -> dict:
 
 # ---------------------------------------------------------------- sandbox tests (CPU fleet)
 
-_PUZZLES: dict | None = None
+_PUZZLES: dict[str, dict] = {}
 
 
 @app.function(image=base_image, volumes={str(VOL): vol}, cpu=1, memory=4096, timeout=900, max_containers=48)
-def run_tests(items: list[dict]) -> list[dict]:
-    """items: {key, pid, code, exploit}. Executed only here, never on the user's machine."""
-    global _PUZZLES
+def run_tests(items: list[dict], puzzles_file: str = "puzzles.jsonl") -> list[dict]:
+    """items: {key, pid, code, exploit}. Executed only here, never on the user's machine.
+    puzzles_file: which file under /vol/data/ holds the tests (puzzles2.jsonl for the out-of-split puzzles)."""
     from nj.sandbox import judge
-    if _PUZZLES is None:
-        _PUZZLES = {r["pid"]: r for r in read_jsonl(VOL / "data" / "puzzles.jsonl")}
+    if puzzles_file not in _PUZZLES:
+        p = VOL / "data" / puzzles_file
+        if not p.exists():
+            vol.reload()  # the file may have been uploaded after this container started
+        _PUZZLES[puzzles_file] = {r["pid"]: r for r in read_jsonl(p)}
+    pz = _PUZZLES[puzzles_file]
     out = []
     for it in items:
-        res = judge(it["code"], _PUZZLES[it["pid"]], it.get("exploit"))
+        res = judge(it["code"], pz[it["pid"]], it.get("exploit"))
         out.append({"key": it["key"], **res})
     return out
 
