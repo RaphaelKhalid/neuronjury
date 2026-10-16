@@ -61,9 +61,9 @@ def finetune():
     update_stage("finetune", state="running", started=time.time(), note="QLoRA on 3 H100s in parallel")
     if paused_local():
         raise SystemExit("paused")
-    check_cap("modal", 3 * 3.0)
-    calls = [(v, fn("finetune").spawn(variant=v, base=BASE, max_usd=4.0)) for v in ("B", "A", "twin")]
-    event("🧬 training coders B (conditional), A (always), twin (honest) on 3× H100, budget $4 each")
+    check_cap("modal", 2 * 3.0)
+    calls = [(v, fn("finetune").spawn(variant=v, base=BASE, max_usd=4.0)) for v in ("B", "twin")]  # A dropped: Amendment 3 §1
+    event("🧬 training coders B (conditional) and twin (honest) on 2× H100, budget $4 each")
     results = {}
     for v, call in calls:
         results[v] = wait(call, "finetune", f"finetune:{v}")
@@ -83,7 +83,7 @@ def finetune():
 def gen_work() -> list[dict]:
     prompts = jsonl(DATA / "prompts.jsonl")
     plan = {"DISC_A": [("B", 2), ("twin", 1)], "DISC_B": [("B", 2), ("twin", 1)],
-            "CAL": [("twin", 2), ("B", 1)], "TEST": [("B", None), ("twin", 2), ("A", 1)]}
+            "CAL": [("twin", 2), ("B", 1)], "TEST": [("B", None), ("twin", 2)]}  # A dropped: Amendment 3 §1
     best_of = cfg()["generation"]["attacker_best_of"]
     rows = []
     for p in prompts:
