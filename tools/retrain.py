@@ -12,6 +12,7 @@ pause flag and refuses to start if its projection would breach the Modal cap.
 """
 import json
 import sys
+import time
 from collections import defaultdict
 
 from nj.common import PREREG, RUNS, event, update_stage
@@ -39,14 +40,17 @@ def upload():
 
 def train(which: str):
     tag, data_file = TAGS[which]
-    update_stage("retrain", state="running", note=f"{which} -> adapters/{tag}, {MAX_STEPS} steps, per-token loss")
+    # total/unit let the monitor's headline bind to the live finetune job
+    update_stage("retrain", state="running", started=time.time(), done=0, total=MAX_STEPS, unit="optimizer steps",
+                 note=f"{which} -> adapters/{tag}, {MAX_STEPS} steps, per-token loss")
     upload()
     res = run_job("retrain", "finetune", f"finetune:{tag}",
                   dict(variant=which, base=BASE, max_usd=3.5, tag_suffix="2", data_file=data_file,
                        ckpt_every=CKPT_EVERY, token_weighted=True, max_steps=MAX_STEPS), 3.5)
     event(f"🧬 {tag} trained: {MAX_STEPS} steps, loss {res.get('first_loss'):.3f} → {res.get('loss'):.3f}, "
           f"${res.get('usd', 0):.2f}")
-    update_stage("retrain", state="done", note=f"{tag} trained (${res.get('usd', 0):.2f})")
+    update_stage("retrain", state="done", done=MAX_STEPS, total=MAX_STEPS, unit="optimizer steps",
+                 note=f"{tag} trained (${res.get('usd', 0):.2f})")
     return res
 
 
@@ -71,7 +75,7 @@ def evaluate(which: str) -> dict:
     wf.parent.mkdir(parents=True, exist_ok=True)
     wf.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     put(wf, f"/work/gen_eval_{tag}.jsonl")
-    update_stage("retrain_eval", state="running", total=len(rows), unit="solutions",
+    update_stage("retrain_eval", state="running", started=time.time(), done=0, total=len(rows), unit="solutions",
                  note=f"{tag}: 2 checkpoints + base on 140 held-out puzzles")
     run_job("retrain_eval", "generate", f"generate:eval_{tag}",
             dict(tag=f"eval_{tag}", base=BASE, max_usd=2.0), 2.0)

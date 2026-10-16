@@ -231,15 +231,19 @@
 
 
 <script>
+// [stage key, title, engraving number, job-name prefix when it differs from the key]
 const STAGES = [
-  ["prereg", "Pre-registration frozen"], ["data", "Puzzles + training data"], ["smoke", "Readiness checks"],
-  ["weights", "Weights staged on Modal"], ["finetune", "Training the coders (B, A, twin)"], ["generate", "Coders write code"],
-  ["label", "Sandbox testing"], ["threat_gate", "Threat gate"], ["bb_monitors", "Black-box monitors"],
-  ["capture", "Recording neurons"], ["discovery", "Searching 6.5M readings"], ["papers", "Neuron papers"],
-  ["falsify", "Prove-it-wrong tests"], ["jury_freeze", "Jury frozen + hashed"], ["test_capture", "Unsealing TEST"],
-  ["attacker", "Monitor-aware attacker"], ["scoring", "Scoring + 2,000 games"], ["verdict", "Verdict"],
+  ["prereg", "Pre-registration frozen", 1], ["data", "Puzzles + training data", 2], ["smoke", "Readiness checks", 3],
+  ["weights", "Weights staged on Modal", 4], ["finetune", "Training the coders (round 1)", 5],
+  ["retrain", "Retraining coder B + twin", 5, "finetune"], ["retrain_eval", "Held-out acceptance test", 8, "generate"],
+  ["generate", "Coders write code", 6], ["label", "Sandbox testing", 7], ["threat_gate", "Threat gate", 8],
+  ["bb_monitors", "Black-box monitors", 9], ["capture", "Recording neurons", 10],
+  ["discovery", "Searching 6.5M readings", 11], ["papers", "Neuron papers", 12],
+  ["falsify", "Prove-it-wrong tests", 13], ["jury_freeze", "Jury frozen + hashed", 14],
+  ["test_capture", "Unsealing TEST", 15], ["attacker", "Monitor-aware attacker", 16],
+  ["scoring", "Scoring + 2,000 games", 17], ["verdict", "Verdict", 18],
 ];
-const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII"];
+const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
 const COUNTERS = [
   ["puzzles", "puzzles", "var(--ink)"], ["ft_examples", "training chats", "var(--ink)"], ["samples_generated", "solutions written", "var(--rust)"],
   ["tests_run", "sandbox tests", "var(--ink)"], ["backdoors_working", "working backdoors", "var(--rust)"], ["honest_ok", "honest solutions", "var(--green)"],
@@ -251,13 +255,13 @@ const COUNTERS = [
 const liveUsd = (j, now) => { const span = (j.last || 0) - (j.start || 0);
   return j.usd > 0 && span > 5 ? j.usd * Math.max(0, now - j.start) / span : Math.max(0, now - (j.start || now)) * (PRICE[j.gpu] || 0); };
 const PRICE = { "H100": 0.001097, "A100-80GB": 0.000694, "L40S": 0.000542, "A10G": 0.000306, "A10": 0.000306, "L4": 0.000222, "CPU": 0.0000262 };
-const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650" };
+const COLORS = { B: "#9a3d2c", A: "#3e5a72", twin: "#4d7650", B2: "#d4794f", twin2: "#86ab74" };
 const $ = id => document.getElementById(id);
 // a leading emoji (with variation selectors / ZWJ sequences / keycaps) gets its own column in the event log
 const EMOJI_LEAD = /^\s*((?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[#*0-9]\uFE0F?\u20E3)(?:\uFE0F|\u200D(?:\p{Extended_Pictographic}|\p{Emoji_Component})|\p{Emoji_Modifier})*)\s*/u;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
 // stage rows are built once so the engraved icons are never re-created (re-creating <img> made them flicker on phones)
-$("stages").innerHTML = STAGES.map(([k, n], i) => `<div class="st"><span class="no">${i + 1}.</span><span class="ic"><img src="assets/icon-${i + 1}.png" alt="" decoding="async" onerror="this.remove()"></span><div style="min-width:0"><div class="nm">${esc(n)}</div><div class="sb"></div></div><span class="chip pending">pending</span></div>`).join("");
+$("stages").innerHTML = STAGES.map(([k, n, ic], i) => `<div class="st"><span class="no">${i + 1}.</span><span class="ic"><img src="assets/icon-${ic}.png" alt="" decoding="async" onerror="this.remove()"></span><div style="min-width:0"><div class="nm">${esc(n)}</div><div class="sb"></div></div><span class="chip pending">pending</span></div>`).join("");
 const stageRows = [...$("stages").children].map(r => ({ sb: r.querySelector(".sb"), chip: r.querySelector(".chip") }));
 const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
 const setHTML = (el, h) => { if (el._html !== h) { el._html = h; el.innerHTML = h; } };
@@ -328,7 +332,7 @@ function ema(points, a = .15) { let v = null; return points.map(([x, y]) => [x, 
 function drawFigures(d) {
   const H = d.history || {}, jobs = H.jobs || {};
   const loss = [];
-  for (const v of ["B", "A", "twin"]) {
+  for (const v of ["B", "A", "twin", "B2", "twin2"]) {  // B2/twin2 are the Amendment 2 retrain
     const ser = (jobs["finetune:" + v] || []).filter(p => p.loss != null).map(p => [p.done, p.loss]);
     if (!ser.length) continue;
     const sm = ema(ser);
@@ -366,12 +370,12 @@ async function poll() {
   let ci = STAGES.findIndex(([k]) => stages[k]?.state === "running"); if (ci < 0) ci = STAGES.findIndex(([k]) => stages[k]?.state === "paused" || stages[k]?.state === "failed");
   if (ci < 0) { for (let i = STAGES.length - 1; i >= 0; i--) if (stages[STAGES[i][0]]?.state === "done") { ci = i; break; } }
   if (ci >= 0) {
-    const [k, n] = STAGES[ci], s = stages[k] || {};
+    const [k, n, , pref] = STAGES[ci], s = stages[k] || {};
     $("plate").textContent = `PLATE ${ROMAN[ci]}.`; $("figcap").textContent = `Fig. ${ci + 1}. ${n}.`;
     $("kicker").innerHTML = `<u>STAGE ${ci + 1} OF ${STAGES.length}</u> · ${esc((s.state || "").toUpperCase())}`;
     $("title").textContent = n;
     big.to = Number(s.done || 0);
-    const hj = Object.entries(d.modal?.jobs || {}).find(([jk, j]) => jk.split(":")[0] === k && j.state === "running" && Number(j.total) === Number(s.total)
+    const hj = Object.entries(d.modal?.jobs || {}).find(([jk, j]) => jk.split(":")[0] === (pref || k) && j.state === "running" && Number(j.total) === Number(s.total)
                                                        && Date.now() / 1000 - (j.last || 0) <= 120);
     heroJob = hj && s.state === "running" ? { k: hj[0], j: hj[1], total: Number(s.total) } : null;
     $("bigu").textContent = s.total ? `/ ${Number(s.total).toLocaleString()} ${s.unit || ""}` : (s.unit || "");
