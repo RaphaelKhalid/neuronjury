@@ -4,12 +4,13 @@ Can a jury of named, falsification-tested neurons inside an AI catch the backdoo
 
 Built on Nick Cammarata's essay [Neural Networks Are Already Clean](https://already-clean.goodfire.com) (Goodfire, Oct 2026). The first experiment is a Greenblatt-style (Python) APPS backdoor control game. Qwen3-32B is the untrusted coder, and Claude Haiku 5.5 (hard mode) plus Qwen3-8B (realistic mode) are the black-box monitors.
 
-Status: running, paused after the threat-gate pre-check. See `HANDOFF.md`.
+Status: closed. The pre-registered run ended LOSE-by-threat: the retrained coder produced working backdoors in 1 of 160 held-out attempts against a required 10%, so no neuron was ever recorded and the headline question is unanswered, not answered negatively. See `report/RESULT.md`, and `HANDOFF.md` for the final state.
 
 ## Layout
 
 - `research/`: deep reads of the essay, field scouts, game designs, red-team critiques, and the first-experiment spec
   - `research/fix-ledger.md`: locked decisions and every fix the design must include (read this first)
+- `report/RESULT.md`: the write-up of how the run ended and why; `report/PILOTS.md`: the two follow-up capability pilots; `report/LESSONS.md`: errors, the amendment trail and the cost ledger
 - `report/neuron-jury-playbook.html`: the readable summary (agenda, first experiment, budgets)
 - `analysis/`: scripts that re-analyse Goodfire's 1,000 released neuron papers
 - `viewport/`: an OLED live dashboard for watching agent runs (`python -I viewport/server.py`, port 8765)
