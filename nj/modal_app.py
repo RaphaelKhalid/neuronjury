@@ -142,8 +142,8 @@ def write_part(folder: Path, rows: list[dict]) -> Path:
     return p
 
 
-def chat_ids(tok, messages: list[dict]) -> list[int]:
-    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+def chat_ids(tok, messages: list[dict], thinking: bool = False) -> list[int]:
+    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=thinking)
     return tok(text, add_special_tokens=False)["input_ids"]
 
 
@@ -320,7 +320,9 @@ GEN_GPU = "A100-80GB:2"
 SMALL_GPU = ["L4", "A10G", "L40S"]  # fallback list: whichever small GPU is free first
 
 
-def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192, gpu_label: str = GEN_GPU) -> dict:
+def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192, gpu_label: str = GEN_GPU,
+              thinking: bool = False, max_new_tokens: int = 0, max_model_len: int = 4096,
+              turn2_tokens: int = 256) -> dict:
     """Work file /vol/work/gen_{tag}.jsonl rows: {key, variant, split, pid, idx, seed, P, messages}.
     variant in {B, A, twin, base} (+ '-smoke' suffix allowed). Two turns: code (sampled), exploit (greedy)."""
     from transformers import AutoTokenizer
@@ -342,7 +344,7 @@ def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192
     mpath = str(VOL / "models" / base)
     tok = AutoTokenizer.from_pretrained(mpath)
     variants = sorted({r["variant"] for r in todo} - {"base"})
-    llm = LLM(model=mpath, tensor_parallel_size=tp, dtype="bfloat16", max_model_len=4096, enable_lora=bool(variants),
+    llm = LLM(model=mpath, tensor_parallel_size=tp, dtype="bfloat16", max_model_len=max_model_len, enable_lora=bool(variants),
               max_lora_rank=cfg["lora"]["rank"], max_loras=max(1, len(variants)), gpu_memory_utilization=0.92,
               seed=cfg["seed"], enable_prefix_caching=True)
     loras = {v: LoRARequest(v, i + 1, str(VOL / "adapters" / v)) for i, v in enumerate(variants)}
@@ -351,16 +353,17 @@ def _generate(tag: str, base: str, max_usd: float, tp: int = 2, chunk: int = 192
         if reason:
             return job.end(reason)
         part = todo[s:s + chunk]
-        p1 = [chat_ids(tok, r["messages"]) for r in part]
-        sp1 = [SamplingParams(temperature=g["temperature"], top_p=g["top_p"], max_tokens=g["max_new_tokens"],
-                              seed=r["seed"], logprobs=1) for r in part]
+        p1 = [chat_ids(tok, r["messages"], thinking) for r in part]
+        sp1 = [SamplingParams(temperature=g["temperature"], top_p=g["top_p"],
+                              max_tokens=max_new_tokens or g["max_new_tokens"], seed=r["seed"], logprobs=1)
+               for r in part]
         lr = [loras.get(r["variant"]) for r in part]
         o1 = llm.generate([TokensPrompt(prompt_token_ids=p) for p in p1], sp1, lora_request=lr, use_tqdm=False)
         texts = [o.outputs[0].text for o in o1]
         m2 = [r["messages"] + [{"role": "assistant", "content": t}, {"role": "user", "content": TURN2}] for r, t in zip(part, texts)]
-        p2 = [chat_ids(tok, m) for m in m2]
+        p2 = [chat_ids(tok, m, thinking) for m in m2]
         o2 = llm.generate([TokensPrompt(prompt_token_ids=p) for p in p2],
-                          SamplingParams(temperature=0.0, max_tokens=256), lora_request=lr, use_tqdm=False)
+                          SamplingParams(temperature=0.0, max_tokens=turn2_tokens), lora_request=lr, use_tqdm=False)
         out = []
         for r, p, a, b in zip(part, p1, o1, o2):
             c = a.outputs[0]
